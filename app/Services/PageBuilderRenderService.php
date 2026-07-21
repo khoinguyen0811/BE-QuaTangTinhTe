@@ -78,18 +78,20 @@ class PageBuilderRenderService
         $blocksData = [];
         if ($page->builder_page_id) {
             $builderPage = \HansSchouten\LaravelPageBuilder\Models\PageBuilderPage::find($page->builder_page_id);
-            if ($builderPage && $builderPage->data) {
-                $data = is_string($builderPage->data)
-                    ? json_decode($builderPage->data, true)
-                    : $builderPage->data;
+            if ($builderPage) {
+                if ($builderPage->data) {
+                    $data = is_string($builderPage->data)
+                        ? json_decode($builderPage->data, true)
+                        : $builderPage->data;
 
-                if (is_array($data)) {
-                    // blocks data is keyed by language code, then by block instance ID
-                    $blocks = $data['blocks'] ?? [];
-                    // Flatten all language variants — prefer the first available language
-                    foreach ($blocks as $languageBlocks) {
-                        if (is_array($languageBlocks)) {
-                            $blocksData = array_merge($blocksData, $languageBlocks);
+                    if (is_array($data)) {
+                        // blocks data is keyed by language code, then by block instance ID
+                        $blocks = $data['blocks'] ?? [];
+                        // Flatten all language variants — prefer the first available language
+                        foreach ($blocks as $languageBlocks) {
+                            if (is_array($languageBlocks)) {
+                                $blocksData = array_merge($blocksData, $languageBlocks);
+                            }
                         }
                     }
                 }

@@ -52,10 +52,24 @@ class PageBuilderEditorController extends Controller
                     }
                 }
                 
-                $isCurrentlyEmpty = empty($existingBuilderPage->draft_html) && 
-                                    ($existingBuilderPage->data === '{}' || empty($existingBuilderPage->data));
-                
-                if ($isCurrentlyEmpty && $hasLegacyContent) {
+                // Parse existing builder data to check for blocks
+                $hasBuilderBlocks = false;
+                if (!empty($existingBuilderPage->data)) {
+                    $decodedData = is_string($existingBuilderPage->data)
+                        ? json_decode($existingBuilderPage->data, true)
+                        : $existingBuilderPage->data;
+                    
+                    if (is_array($decodedData) && isset($decodedData['blocks'])) {
+                        foreach ($decodedData['blocks'] as $langBlocks) {
+                            if (is_array($langBlocks) && count($langBlocks) > 0) {
+                                $hasBuilderBlocks = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!$hasBuilderBlocks && $hasLegacyContent) {
                     $shouldConvert = true;
                 }
             }

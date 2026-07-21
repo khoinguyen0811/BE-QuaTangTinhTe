@@ -70,13 +70,13 @@ class PageBuilderEditorController extends Controller
 
                 if (is_array($layoutSource) && isset($layoutSource['blocks'])) {
                     // Convert legacy layout blocks to PageBuilder format
-                    $converted = \Modules\PageBuilder\Services\LegacyLayoutConverter::convert($layoutSource);
+                    $converted = \HansSchouten\LaravelPageBuilder\Services\LegacyLayoutConverter::convert($layoutSource);
                     $draftHtml = $converted['html'];
                     $dataJson = $converted['data'];
                 } elseif (is_string($layoutSource)) {
                     $decoded = json_decode($layoutSource, true);
                     if (is_array($decoded) && isset($decoded['blocks'])) {
-                        $converted = \Modules\PageBuilder\Services\LegacyLayoutConverter::convert($decoded);
+                        $converted = \HansSchouten\LaravelPageBuilder\Services\LegacyLayoutConverter::convert($decoded);
                         $draftHtml = $converted['html'];
                         $dataJson = $converted['data'];
                     }

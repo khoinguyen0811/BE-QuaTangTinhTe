@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\PageBuilder\Services;
+namespace HansSchouten\LaravelPageBuilder\Services;
 
 class LegacyLayoutConverter
 {

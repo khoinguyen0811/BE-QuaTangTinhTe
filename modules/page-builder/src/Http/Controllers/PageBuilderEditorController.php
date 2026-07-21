@@ -48,7 +48,7 @@ class PageBuilderEditorController extends Controller
                 $shouldConvert = true;
             } else {
                 $hasLegacyContent = false;
-                $layoutSource = $page->layout_published ?: $page->layout_draft;
+                $layoutSource = $page->layout_draft ?: $page->layout_published;
                 if (is_array($layoutSource) && isset($layoutSource['blocks'])) {
                     $hasLegacyContent = true;
                 } elseif (is_string($layoutSource)) {
@@ -86,7 +86,9 @@ class PageBuilderEditorController extends Controller
                 $draftHtml = '';
                 $dataJson = '{}';
 
-                $layoutSource = $page->layout_published ?: $page->layout_draft;
+                // Prefer the latest editable legacy draft. Published content is only
+                // a fallback for pages that never had a separate draft.
+                $layoutSource = $page->layout_draft ?: $page->layout_published;
 
                 if (is_array($layoutSource) && isset($layoutSource['blocks'])) {
                     // Convert legacy layout blocks to PageBuilder format
@@ -134,6 +136,8 @@ class PageBuilderEditorController extends Controller
             });
             $page->refresh();
         }
+
+        $this->normalizeBuilderDataForEditor($page);
 
         // Initialize PHPageBuilder core
         $phpPageBuilder = app()->make('phpPageBuilder');
@@ -249,12 +253,34 @@ HTML;
         // Apply our custom script
         $phpPageBuilder->getPageBuilder()->customScripts('head', $customScript);
 
+        // Restore the complete CSS string as GrapesJS rules. The upstream saver can
+        // discard style-array entries for ordinary element boxes even though the CSS
+        // string is still present, which made those boxes lose styling after reopening.
+        $bodyScripts = <<<'HTML'
+<script type="text/javascript">
+(function restoreSavedBuilderCss() {
+    function restore() {
+        if (window.editor && typeof window.initialCss === 'string' && window.initialCss.trim() !== '') {
+            window.editor.setStyle(window.initialCss);
+        }
+    }
+
+    if (window.grapesJSLoaded) {
+        restore();
+    } else if (window.editor) {
+        window.editor.on('load', restore);
+    }
+})();
+</script>
+HTML;
+
         // Inject element-level building blocks (columns, text, image, video, form, etc.)
         $elementBlocksPath = __DIR__ . '/../../resources/assets/element-blocks.js';
         if (file_exists($elementBlocksPath)) {
             $elementBlocksJs = file_get_contents($elementBlocksPath);
-            $phpPageBuilder->getPageBuilder()->customScripts('body', '<script type="text/javascript">' . $elementBlocksJs . '</script>');
+            $bodyScripts .= '<script type="text/javascript">' . $elementBlocksJs . '</script>';
         }
+        $phpPageBuilder->getPageBuilder()->customScripts('body', $bodyScripts);
 
         // Render page builder GrapesJS UI
         $phpPageBuilder->getPageBuilder()->renderPageBuilder($phpbPage);
@@ -288,20 +314,24 @@ HTML;
             $dataString = $request->input('data');
             $payload = json_decode($dataString, true);
 
+            if (!is_array($payload)) {
+                return response()->json(['message' => 'Dữ liệu Page Builder không hợp lệ.'], 422);
+            }
+
+            $builderPage = PageBuilderPage::findOrFail($pageId);
+
             // Extract GrapesJS compiled HTML/CSS
             $html = $payload['html'] ?? '';
-            $css = $payload['css'] ?? '';
-
-            $dataString = $request->input('data');
-            $payload = json_decode($dataString, true);
-
-            // Extract GrapesJS compiled HTML/CSS
-            $html = $payload['html'] ?? '';
-            $css = $payload['css'] ?? '';
+            $css = array_key_exists('css', $payload) && $payload['css'] !== null
+                ? (string) $payload['css']
+                : (string) ($builderPage->draft_css ?? '');
 
             if (is_array($html)) {
                 $html = $html[0] ?? '';
             }
+
+            $payload['css'] = $css;
+            $dataString = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             // Verify and sync images with Media Library database values
             $html = $this->validateAndSyncMediaImages($html);
@@ -404,6 +434,7 @@ HTML;
                     'revision' => $newRevisionIndex,
                     'html' => $builderPage->draft_html ?? '',
                     'css' => $builderPage->draft_css ?? '',
+                    'data' => $builderPage->data ?? '{}',
                 ]),
                 'published_at' => $page->published_at ?? now(),
                 'updated_by' => auth()->id()
@@ -599,5 +630,54 @@ HTML;
         libxml_use_internal_errors($libxmlState);
 
         return trim($cleanHtml);
+    }
+
+    /**
+     * Keep project JSON in sync with the separately stored draft snapshot.
+     * PHPageBuilder loads the editor from data.html/data.css only, while older
+     * records may contain their usable content solely in draft_html/draft_css.
+     */
+    private function normalizeBuilderDataForEditor(CustomPage $page): void
+    {
+        if (!$page->builder_page_id) {
+            return;
+        }
+
+        $builderPage = PageBuilderPage::find($page->builder_page_id);
+        if (!$builderPage) {
+            return;
+        }
+
+        $data = is_string($builderPage->data)
+            ? json_decode($builderPage->data, true)
+            : $builderPage->data;
+        $data = is_array($data) ? $data : [];
+        $changed = false;
+
+        if ((!isset($data['html']) || $data['html'] === [] || $data['html'] === '') && trim((string) $builderPage->draft_html) !== '') {
+            $data['html'] = [(string) $builderPage->draft_html];
+            $changed = true;
+        }
+
+        if ((!array_key_exists('css', $data) || $data['css'] === null || $data['css'] === '') && trim((string) $builderPage->draft_css) !== '') {
+            $data['css'] = (string) $builderPage->draft_css;
+            $changed = true;
+        }
+
+        if (!isset($data['components']) || !is_array($data['components'])) {
+            $data['components'] = [];
+            $changed = true;
+        }
+
+        if (!isset($data['blocks']) || !is_array($data['blocks'])) {
+            $data['blocks'] = [];
+            $changed = true;
+        }
+
+        if ($changed) {
+            $builderPage->update([
+                'data' => json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]);
+        }
     }
 }

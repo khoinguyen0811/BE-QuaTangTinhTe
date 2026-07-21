@@ -20,9 +20,11 @@ class PageBuilderRenderService
             if ($builderPage) {
                 $html = $builderPage->draft_html ?? '';
                 $css = $builderPage->draft_css ?? '';
+                $projectData = $builderPage->data;
             } else {
                 $html = '';
                 $css = '';
+                $projectData = null;
             }
         } else {
             $layoutPublished = $page->layout_published;
@@ -40,10 +42,11 @@ class PageBuilderRenderService
 
             $html = $published['html'];
             $css = $published['css'] ?? '';
+            $projectData = $published['data'] ?? null;
         }
 
         // 0. Resolve [block slug="..." id="..."] shortcodes into rendered HTML
-        $html = $this->resolveBlockShortcodes($html, $page);
+        $html = $this->resolvePageBuilderShortcodes($html, $page, $projectData);
 
         // 1. Sanitize HTML to prevent XSS
         $cleanHtml = $this->sanitizeXss($html);
@@ -63,10 +66,47 @@ class PageBuilderRenderService
     /**
      * Resolve PHPageBuilder [block slug="..." id="..."] shortcodes into actual HTML.
      *
-     * Strategy:
-     * 1. Read the blocks data from PageBuilderPage JSON (contains user-edited HTML per block instance)
-     * 2. Fallback: read the block's view.html from the theme directory
+     * Dynamic PHP blocks must be rendered through PHPageBuilder so their saved
+     * settings and live catalog data are applied. The older HTML-only resolver is
+     * retained as a fallback for dangling legacy records.
      */
+    protected function resolvePageBuilderShortcodes(string $html, CustomPage $page, $projectData = null): string
+    {
+        if (strpos($html, '[block ') === false) {
+            return $html;
+        }
+
+        $builderPage = $page->builder_page_id
+            ? \HansSchouten\LaravelPageBuilder\Models\PageBuilderPage::find($page->builder_page_id)
+            : null;
+        if (!$builderPage) {
+            return $this->resolveBlockShortcodes($html, $page);
+        }
+
+        $data = is_string($projectData) ? json_decode($projectData, true) : $projectData;
+        if (!is_array($data)) {
+            $data = is_string($builderPage->data) ? json_decode($builderPage->data, true) : $builderPage->data;
+        }
+        $data = is_array($data) ? $data : [];
+        $allLanguageBlocks = $data['blocks'] ?? [];
+        $locale = app()->getLocale();
+        $blocksData = $allLanguageBlocks[$locale]
+            ?? $allLanguageBlocks['vi']
+            ?? (is_array($allLanguageBlocks) ? (reset($allLanguageBlocks) ?: []) : []);
+
+        app()->make('phpPageBuilder');
+        $repositoryPage = (new \PHPageBuilder\Repositories\PageRepository)->findWithId($builderPage->id);
+        if (!$repositoryPage) {
+            return $this->resolveBlockShortcodes($html, $page);
+        }
+
+        $theme = phpb_instance('theme', [phpb_config('theme'), phpb_config('theme.active_theme')]);
+        $renderer = phpb_instance(\PHPageBuilder\Modules\GrapesJS\PageRenderer::class, [$theme, $repositoryPage, false]);
+        $renderer->setLanguage($locale);
+
+        return $renderer->parseShortcodes($html, is_array($blocksData) ? $blocksData : []);
+    }
+
     protected function resolveBlockShortcodes(string $html, CustomPage $page): string
     {
         // Quick check — if no shortcodes, return as-is

@@ -1,7 +1,8 @@
 <?php
 
-return [
-    'title' => 'Sản phẩm 2 cột',
-    'category' => 'Sản phẩm',
-    'icon' => 'fa fa-shopping-bag',
-];
+$config = require dirname(__DIR__) . '/product-grid/config.php';
+$config['title'] = 'Danh sách sản phẩm';
+$config['icon'] = 'fa fa-shopping-bag';
+$config['settings']['columns']['value'] = '2';
+
+return $config;

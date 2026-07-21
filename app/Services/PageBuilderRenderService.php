@@ -16,7 +16,7 @@ class PageBuilderRenderService
     public function render(CustomPage $page, bool $preview = false): string
     {
         if ($preview && $page->builder_page_id) {
-            $builderPage = \Modules\PageBuilder\Models\PageBuilderPage::find($page->builder_page_id);
+            $builderPage = \HansSchouten\LaravelPageBuilder\Models\PageBuilderPage::find($page->builder_page_id);
             if ($builderPage) {
                 $html = $builderPage->draft_html ?? '';
                 $css = $builderPage->draft_css ?? '';
@@ -77,7 +77,7 @@ class PageBuilderRenderService
         // Load blocks data from PageBuilderPage JSON
         $blocksData = [];
         if ($page->builder_page_id) {
-            $builderPage = \Modules\PageBuilder\Models\PageBuilderPage::find($page->builder_page_id);
+            $builderPage = \HansSchouten\LaravelPageBuilder\Models\PageBuilderPage::find($page->builder_page_id);
             if ($builderPage && $builderPage->data) {
                 $data = is_string($builderPage->data)
                     ? json_decode($builderPage->data, true)

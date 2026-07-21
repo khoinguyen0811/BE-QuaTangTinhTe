@@ -30,6 +30,12 @@ class PageBuilderEditorController extends Controller
     {
         Gate::authorize('update', $page);
 
+        // Auto-provision PageBuilder active languages if missing
+        DB::table('pagebuilder_settings')->updateOrInsert(
+            ['setting' => 'languages'],
+            ['value' => 'vi,en', 'is_array' => 1]
+        );
+
         // Auto-provision PageBuilder bridge if missing, legacy driver, or empty page builder data
         $shouldConvert = false;
         $existingBuilderPage = null;

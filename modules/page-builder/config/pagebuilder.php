@@ -27,13 +27,13 @@ return [
     'storage' => [
         'use_database' => true,
         'database' => [
-            'driver'    => env('DB_CONNECTION', 'mysql'),
-            'host'      => env('DB_HOST', '127.0.0.1').':'.env('DB_PORT', 3306),
-            'database'  => env('DB_DATABASE'),
-            'username'  => env('DB_USERNAME'),
-            'password'  => env('DB_PASSWORD'),
-            'charset'   => 'utf8',
-            'collation' => 'utf8_unicode_ci',
+            'driver'    => config('database.default', 'mysql'),
+            'host'      => config('database.connections.' . config('database.default', 'mysql') . '.host', '127.0.0.1') . ':' . config('database.connections.' . config('database.default', 'mysql') . '.port', 3306),
+            'database'  => config('database.connections.' . config('database.default', 'mysql') . '.database'),
+            'username'  => config('database.connections.' . config('database.default', 'mysql') . '.username'),
+            'password'  => config('database.connections.' . config('database.default', 'mysql') . '.password'),
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
             'prefix'    => 'pagebuilder_',
         ],
         'uploads_folder' => storage_path('app/pagebuilder/uploads')

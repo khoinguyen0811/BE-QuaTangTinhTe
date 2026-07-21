@@ -30,6 +30,9 @@ class PageBuilderRenderService
         $html = $published['html'];
         $css = $published['css'] ?? '';
 
+        // 0. Resolve [block slug="..." id="..."] shortcodes into rendered HTML
+        $html = $this->resolveBlockShortcodes($html, $page);
+
         // 1. Sanitize HTML to prevent XSS
         $cleanHtml = $this->sanitizeXss($html);
 
@@ -43,6 +46,89 @@ class PageBuilderRenderService
         }
 
         return $styleBlock . $cleanHtml;
+    }
+
+    /**
+     * Resolve PHPageBuilder [block slug="..." id="..."] shortcodes into actual HTML.
+     *
+     * Strategy:
+     * 1. Read the blocks data from PageBuilderPage JSON (contains user-edited HTML per block instance)
+     * 2. Fallback: read the block's view.html from the theme directory
+     */
+    protected function resolveBlockShortcodes(string $html, CustomPage $page): string
+    {
+        // Quick check — if no shortcodes, return as-is
+        if (strpos($html, '[block ') === false) {
+            return $html;
+        }
+
+        // Load blocks data from PageBuilderPage JSON
+        $blocksData = [];
+        if ($page->builder_page_id) {
+            $builderPage = \Modules\PageBuilder\Models\PageBuilderPage::find($page->builder_page_id);
+            if ($builderPage && $builderPage->data) {
+                $data = is_string($builderPage->data)
+                    ? json_decode($builderPage->data, true)
+                    : $builderPage->data;
+
+                if (is_array($data)) {
+                    // blocks data is keyed by language code, then by block instance ID
+                    $blocks = $data['blocks'] ?? [];
+                    // Flatten all language variants — prefer the first available language
+                    foreach ($blocks as $languageBlocks) {
+                        if (is_array($languageBlocks)) {
+                            $blocksData = array_merge($blocksData, $languageBlocks);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Theme blocks directory for fallback
+        $themeBlocksDir = base_path('themes/quatangtinhte/blocks');
+
+        // Replace all [block slug="..." id="..."] shortcodes
+        $html = preg_replace_callback(
+            '/\[block\s+slug="([^"]+)"\s+id="([^"]+)"\]/',
+            function ($matches) use ($blocksData, $themeBlocksDir) {
+                $slug = $matches[1];
+                $id = $matches[2];
+
+                // Strategy 1: Use user-edited HTML from blocks data
+                if (isset($blocksData[$id]) && !empty($blocksData[$id]['html'])) {
+                    $blockHtml = $blocksData[$id]['html'];
+                    // Recursively resolve nested shortcodes
+                    if (strpos($blockHtml, '[block ') !== false) {
+                        $blockHtml = preg_replace_callback(
+                            '/\[block\s+slug="([^"]+)"\s+id="([^"]+)"\]/',
+                            function ($m) use ($blocksData, $themeBlocksDir) {
+                                $s = $m[1];
+                                $i = $m[2];
+                                if (isset($blocksData[$i]['html'])) {
+                                    return $blocksData[$i]['html'];
+                                }
+                                $viewFile = $themeBlocksDir . '/' . $s . '/view.html';
+                                return file_exists($viewFile) ? file_get_contents($viewFile) : '';
+                            },
+                            $blockHtml
+                        );
+                    }
+                    return $blockHtml;
+                }
+
+                // Strategy 2: Fallback to theme block view.html
+                $viewFile = $themeBlocksDir . '/' . $slug . '/view.html';
+                if (file_exists($viewFile)) {
+                    return file_get_contents($viewFile);
+                }
+
+                // If no block found, output nothing
+                return '';
+            },
+            $html
+        );
+
+        return $html;
     }
 
     /**

@@ -6,7 +6,7 @@ use HansSchouten\LaravelPageBuilder\LaravelPageBuilder;
 // handle pagebuilder asset requests
 Route::any( config('pagebuilder.general.assets_url') . '{any}', function() {
 
-    $builder = new LaravelPageBuilder(config('pagebuilder'));
+    $builder = app('phpPageBuilder');
     $builder->handlePageBuilderAssetRequest();
 
 })->where('any', '.*');
@@ -15,7 +15,7 @@ Route::any( config('pagebuilder.general.assets_url') . '{any}', function() {
 // handle requests to retrieve uploaded file
 Route::any( config('pagebuilder.general.uploads_url') . '{any}', function() {
 
-    $builder = new LaravelPageBuilder(config('pagebuilder'));
+    $builder = app('phpPageBuilder');
     $builder->handleUploadedFileRequest();
 
 })->where('any', '.*');

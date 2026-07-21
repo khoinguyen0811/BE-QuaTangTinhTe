@@ -18,6 +18,10 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
      */
     public function register()
     {
+        // Load our phpb_full_url override BEFORE PHPageBuilder helpers are loaded.
+        // This must be in global namespace, so we use a separate file.
+        require_once __DIR__ . '/helpers_override.php';
+
         $this->mergeConfigFrom(__DIR__ . '/../config/pagebuilder.php', 'pagebuilder');
     }
 
@@ -50,7 +54,7 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
             } catch (\Throwable $e) {
                 // Fallback to default config if DB connection not established yet
             }
-            return new PHPageBuilder($config);
+            return new LaravelPageBuilder($config);
         });
 
         $this->publishes([

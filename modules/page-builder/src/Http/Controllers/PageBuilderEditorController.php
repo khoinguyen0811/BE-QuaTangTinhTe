@@ -61,6 +61,13 @@ class PageBuilderEditorController extends Controller
         // Initialize PHPageBuilder core
         $phpPageBuilder = app()->make('phpPageBuilder');
 
+        // Dynamically override PHPageBuilder URL paths with correct locale prefix
+        // so all AJAX URLs (save, upload, renderBlock, etc.) point to correct Laravel routes
+        global $phpb_config;
+        $phpb_config['pagebuilder']['url'] = '/' . $locale . '/admin/page-builder-lab/editor';
+        $phpb_config['pagebuilder']['actions']['back'] = '/' . $locale . '/admin/page-builder-lab';
+        $phpb_config['website_manager']['url'] = '/' . $locale . '/admin/page-builder-lab';
+
         // Resolve PageBuilderPage record
         $pageRepository = new \PHPageBuilder\Repositories\PageRepository;
         $phpbPage = $pageRepository->findWithId($page->builder_page_id);
@@ -392,8 +399,32 @@ HTML;
             abort(403, 'Liên kết xem thử không hợp lệ hoặc đã hết hạn.');
         }
 
-        if ($page->builder_driver !== 'laravel-pagebuilder' || ! $page->builder_page_id) {
-            abort(400, 'Page builder configuration invalid.');
+        // Auto-provision PageBuilder bridge if missing or legacy driver
+        if ($page->builder_driver !== 'laravel-pagebuilder' || !$page->builder_page_id || !PageBuilderPage::where('id', $page->builder_page_id)->exists()) {
+            DB::transaction(function () use ($page, $locale) {
+                $builderPage = PageBuilderPage::create([
+                    'name' => $page->title,
+                    'layout' => 'full-width',
+                    'data' => '{}',
+                    'draft_html' => is_array($page->layout_published) ? ($page->layout_published['html'] ?? '') : '',
+                    'draft_css' => is_array($page->layout_published) ? ($page->layout_published['css'] ?? '') : '',
+                ]);
+
+                PageBuilderPageTranslation::create([
+                    'page_id' => $builderPage->id,
+                    'locale' => $locale,
+                    'title' => $page->title,
+                    'meta_title' => $page->seo_title ?? $page->title,
+                    'meta_description' => $page->seo_description ?? '',
+                    'route' => $page->slug,
+                ]);
+
+                $page->update([
+                    'builder_page_id' => $builderPage->id,
+                    'builder_driver' => 'laravel-pagebuilder',
+                ]);
+            });
+            $page->refresh();
         }
 
         $builderPage = PageBuilderPage::findOrFail($page->builder_page_id);

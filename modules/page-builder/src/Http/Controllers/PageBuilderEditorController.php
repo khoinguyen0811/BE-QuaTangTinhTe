@@ -33,12 +33,31 @@ class PageBuilderEditorController extends Controller
         // Auto-provision PageBuilder bridge if missing or legacy driver
         if ($page->builder_driver !== 'laravel-pagebuilder' || !$page->builder_page_id || !PageBuilderPage::where('id', $page->builder_page_id)->exists()) {
             DB::transaction(function () use ($page, $locale) {
+                $draftHtml = '';
+                $dataJson = '{}';
+
+                $layoutSource = $page->layout_published ?: $page->layout_draft;
+
+                if (is_array($layoutSource) && isset($layoutSource['blocks'])) {
+                    // Convert legacy layout blocks to PageBuilder format
+                    $converted = \Modules\PageBuilder\Services\LegacyLayoutConverter::convert($layoutSource);
+                    $draftHtml = $converted['html'];
+                    $dataJson = $converted['data'];
+                } elseif (is_string($layoutSource)) {
+                    $decoded = json_decode($layoutSource, true);
+                    if (is_array($decoded) && isset($decoded['blocks'])) {
+                        $converted = \Modules\PageBuilder\Services\LegacyLayoutConverter::convert($decoded);
+                        $draftHtml = $converted['html'];
+                        $dataJson = $converted['data'];
+                    }
+                }
+
                 $builderPage = PageBuilderPage::create([
                     'name' => $page->title,
                     'layout' => 'full-width',
-                    'data' => '{}',
-                    'draft_html' => is_string($page->layout_published['html'] ?? null) ? $page->layout_published['html'] : '',
-                    'draft_css' => is_string($page->layout_published['css'] ?? null) ? $page->layout_published['css'] : '',
+                    'data' => $dataJson,
+                    'draft_html' => $draftHtml,
+                    'draft_css' => '',
                 ]);
 
                 PageBuilderPageTranslation::create([

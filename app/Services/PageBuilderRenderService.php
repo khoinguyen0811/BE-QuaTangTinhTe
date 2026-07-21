@@ -7,28 +7,40 @@ use App\Models\CustomPage;
 class PageBuilderRenderService
 {
     /**
-     * Render the published visual page builder page HTML with XSS sanitization.
+     * Render the published or draft visual page builder page HTML with XSS sanitization.
      *
      * @param CustomPage $page
+     * @param bool $preview
      * @return string
      */
-    public function render(CustomPage $page): string
+    public function render(CustomPage $page, bool $preview = false): string
     {
-        $layoutPublished = $page->layout_published;
-        
-        $published = null;
-        if (is_array($layoutPublished)) {
-            $published = $layoutPublished;
-        } elseif (is_string($layoutPublished)) {
-            $published = json_decode($layoutPublished, true);
-        }
+        if ($preview && $page->builder_page_id) {
+            $builderPage = \Modules\PageBuilder\Models\PageBuilderPage::find($page->builder_page_id);
+            if ($builderPage) {
+                $html = $builderPage->draft_html ?? '';
+                $css = $builderPage->draft_css ?? '';
+            } else {
+                $html = '';
+                $css = '';
+            }
+        } else {
+            $layoutPublished = $page->layout_published;
+            
+            $published = null;
+            if (is_array($layoutPublished)) {
+                $published = $layoutPublished;
+            } elseif (is_string($layoutPublished)) {
+                $published = json_decode($layoutPublished, true);
+            }
 
-        if (!$published || empty($published['html'])) {
-            return '';
-        }
+            if (!$published || empty($published['html'])) {
+                return '';
+            }
 
-        $html = $published['html'];
-        $css = $published['css'] ?? '';
+            $html = $published['html'];
+            $css = $published['css'] ?? '';
+        }
 
         // 0. Resolve [block slug="..." id="..."] shortcodes into rendered HTML
         $html = $this->resolveBlockShortcodes($html, $page);

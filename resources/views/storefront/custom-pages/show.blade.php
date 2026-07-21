@@ -160,7 +160,7 @@
     <main id="main-content" class="site-main">
         @if(($page->builder_driver ?? 'legacy') === 'laravel-pagebuilder')
             <!-- Visual Page Builder Render -->
-            {!! app(\App\Services\PageBuilderRenderService::class)->render($page) !!}
+            {!! app(\App\Services\PageBuilderRenderService::class)->render($page, $preview ?? false) !!}
         @else
             <!-- Legacy Block Renderer -->
             <x-storefront-block-renderer :layout="$layout" :page="$page" :preview="$preview" />

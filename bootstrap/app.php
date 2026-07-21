@@ -12,7 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function (): void {
-            Route::redirect('/admin', '/'.config('app.locale', 'vi').'/admin');
+            Route::get('/admin', function () {
+                return redirect()->route('admin.login', ['locale' => config('app.locale', 'vi')]);
+            });
 
             Route::middleware(['web', 'setLocale'])
                 ->prefix('{locale}')

@@ -38,8 +38,25 @@ class InvoiceController extends Controller
 
     public function sendEmail(string $locale, Invoice $invoice)
     {
-        \Illuminate\Support\Facades\Mail::to(auth()->user()->email)
-            ->send(new \App\Mail\InvoiceMail($invoice));
+        try {
+            app(\App\Services\NotificationService::class)
+                ->sendInvoice($invoice, auth()->user()->email, true);
+        } catch (\Throwable $exception) {
+            \Illuminate\Support\Facades\Log::warning('Manual invoice email failed.', [
+                'invoice_id' => $invoice->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $message = 'Không thể gửi hóa đơn. Hãy bật và kiểm tra cấu hình Email SMTP trong phần Thông báo.';
+
+            if (request()->expectsJson() || request()->ajax()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()
+                ->route('admin.invoices.show', $invoice)
+                ->with('error', $message);
+        }
 
         if (request()->expectsJson() || request()->ajax()) {
             return response()->json([

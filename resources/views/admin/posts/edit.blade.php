@@ -16,7 +16,18 @@
             align-items: flex-start;
             gap: 8px;
             font-size: 0.85rem;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
+        }
+        .seo-rule-copy {
+            min-width: 0;
+        }
+        .seo-rule-copy strong,
+        .seo-rule-copy small {
+            display: block;
+        }
+        .seo-rule-copy small {
+            color: var(--bs-secondary-color);
+            line-height: 1.35;
         }
         .seo-status-dot {
             width: 14px;
@@ -72,7 +83,10 @@
     </div>
 
     <!-- Form Section -->
-    <form action="{{ route('admin.posts.update', $post) }}" method="POST" enctype="multipart/form-data" class="admin-form-with-sticky-actions">
+    <form action="{{ route('admin.posts.update', $post) }}" method="POST" enctype="multipart/form-data"
+        class="admin-form-with-sticky-actions" data-seo-analyze-url="{{ route('admin.posts.seo-analyze') }}"
+        data-post-id="{{ $post->id }}" data-has-featured-image="{{ $post->image_url ? '1' : '0' }}"
+        data-seo-strict-mode="{{ $seoStrictMode ? '1' : '0' }}">
         @csrf
         @method('PUT')
         @include('admin.posts._form')

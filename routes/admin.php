@@ -25,6 +25,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('notifications', [DashboardController::class, 'notifications'])->name('notifications.index');
+    Route::get('notifications/status', [DashboardController::class, 'notificationStatus'])->name('notifications.status');
 
     Route::get('media', [\App\Http\Controllers\Admin\MediaController::class, 'index'])->name('media.index');
     Route::post('media/upload', [\App\Http\Controllers\Admin\MediaController::class, 'upload'])->name('media.upload');
@@ -45,6 +46,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
         Route::post('post-categories/sort', [\App\Http\Controllers\Admin\PostCategoryController::class, 'sort'])->name('post-categories.sort');
         Route::put('post-categories/{post_category}/quick-update', [\App\Http\Controllers\Admin\PostCategoryController::class, 'quickUpdate'])->name('post-categories.quick-update');
         Route::resource('post-categories', \App\Http\Controllers\Admin\PostCategoryController::class)->except(['show']);
+        Route::post('posts/seo-analyze', [\App\Http\Controllers\Admin\PostController::class, 'analyzeSeo'])->name('posts.seo-analyze');
         Route::resource('posts', \App\Http\Controllers\Admin\PostController::class);
     });
 
@@ -67,8 +69,37 @@ Route::middleware(['auth', 'admin'])->group(function () {
         Route::get('settings', [\App\Http\Controllers\Admin\SettingController::class, 'index'])->name('settings.index');
         Route::post('settings', [\App\Http\Controllers\Admin\SettingController::class, 'update'])->name('settings.update');
 
+        Route::get('home-builder', [\App\Http\Controllers\Admin\HomeBuilderController::class, 'index'])->name('home-builder.index');
+        Route::get('home-builder/draft', [\App\Http\Controllers\Api\AdminHomeLayoutController::class, 'showDraft'])->name('home-builder.draft');
+        Route::put('home-builder/draft', [\App\Http\Controllers\Api\AdminHomeLayoutController::class, 'updateDraft'])->name('home-builder.draft.update');
+        Route::post('home-builder/publish', [\App\Http\Controllers\Api\AdminHomeLayoutController::class, 'publish'])->name('home-builder.publish');
+        Route::get('home-builder/versions', [\App\Http\Controllers\Api\AdminHomeLayoutController::class, 'versions'])->name('home-builder.versions');
+        Route::post('home-builder/rollback/{revision}', [\App\Http\Controllers\Api\AdminHomeLayoutController::class, 'rollback'])->name('home-builder.rollback');
+        Route::get('home-builder/media', [\App\Http\Controllers\Api\AdminHomeLayoutController::class, 'mediaLibrary'])->name('home-builder.media.index');
+        Route::post('home-builder/media', [\App\Http\Controllers\Api\AdminHomeLayoutController::class, 'upload'])->name('home-builder.media');
+
+        // Custom Pages CRUD and Builder Routes
+        Route::get('custom-pages', [\App\Http\Controllers\Admin\CustomPageController::class, 'index'])->name('custom-pages.index');
+        Route::get('custom-pages/create', [\App\Http\Controllers\Admin\CustomPageController::class, 'create'])->name('custom-pages.create');
+        Route::post('custom-pages', [\App\Http\Controllers\Admin\CustomPageController::class, 'store'])->name('custom-pages.store');
+        Route::get('custom-pages/{customPage}/edit', [\App\Http\Controllers\Admin\CustomPageController::class, 'edit'])->name('custom-pages.edit');
+        Route::put('custom-pages/{customPage}', [\App\Http\Controllers\Admin\CustomPageController::class, 'update'])->name('custom-pages.update');
+        Route::delete('custom-pages/{customPage}', [\App\Http\Controllers\Admin\CustomPageController::class, 'destroy'])->name('custom-pages.destroy');
+        Route::get('custom-pages/{customPage}/builder', [\App\Http\Controllers\Admin\CustomPageController::class, 'builder'])->name('custom-pages.builder');
+        Route::post('custom-pages/{id}/restore', [\App\Http\Controllers\Admin\CustomPageController::class, 'restore'])->name('custom-pages.restore');
+
+        Route::get('custom-pages/{customPage}/draft', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'showDraft'])->name('custom-pages.draft');
+        Route::put('custom-pages/{customPage}/layout', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'updateDraft'])->name('custom-pages.layout.update');
+        Route::post('custom-pages/{customPage}/publish', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'publish'])->name('custom-pages.publish');
+        Route::post('custom-pages/{customPage}/unpublish', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'unpublish'])->name('custom-pages.unpublish');
+        Route::get('custom-pages/{customPage}/media', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'mediaLibrary'])->name('custom-pages.media.index');
+        Route::post('custom-pages/{customPage}/media', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'upload'])->name('custom-pages.media');
+
         Route::get('notification-settings', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'index'])->name('notification-settings.index');
         Route::post('notification-settings', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'update'])->name('notification-settings.update');
+        Route::post('notification-settings/test-smtp', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'testSmtp'])->name('notification-settings.test-smtp');
+        Route::post('notification-settings/test-zalo-oa', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'testZaloOa'])->name('notification-settings.test-zalo-oa');
+        Route::post('notification-settings/test-zalo-personal', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'testZaloPersonal'])->name('notification-settings.test-zalo-personal');
         Route::post('notification-settings/get-zalo-chat-id', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'getZaloChatId'])->name('notification-settings.get-chat-id');
 
         Route::post('shipping-partners/{shipping_partner}/toggle-status', [\App\Http\Controllers\Admin\ShippingPartnerController::class, 'toggleStatus'])->name('shipping-partners.toggle-status');
@@ -120,3 +151,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
         });
     });
 });
+
+// Guest-accessible signed route for previewing layout drafts
+Route::get('custom-pages/{customPage}/preview', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'preview'])
+    ->name('custom-pages.preview');

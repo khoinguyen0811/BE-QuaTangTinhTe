@@ -154,4 +154,140 @@ class CatalogCrudTest extends TestCase
         $this->assertSame(0, $second->fresh()->sort_order);
         $this->assertSame(1, $first->fresh()->sort_order);
     }
+
+    public function test_product_many_categories_and_system_category_protection(): void
+    {
+        FeatureSetting::query()->updateOrCreate(
+            ['feature_code' => 'catalog'],
+            ['is_enabled' => true]
+        );
+
+        $parent = Category::query()->create([
+            'name' => ['vi' => 'Danh mục cha'],
+            'slug' => 'danh-muc-cha',
+            'is_active' => true,
+        ]);
+
+        $child1 = Category::query()->create([
+            'parent_id' => $parent->id,
+            'name' => ['vi' => 'Danh mục con 1'],
+            'slug' => 'danh-muc-con-1',
+            'is_active' => true,
+        ]);
+
+        $child2 = Category::query()->create([
+            'parent_id' => $parent->id,
+            'name' => ['vi' => 'Danh mục con 2'],
+            'slug' => 'danh-muc-con-2',
+            'is_active' => true,
+        ]);
+
+        $other = Category::query()->create([
+            'name' => ['vi' => 'Danh mục khác'],
+            'slug' => 'danh-muc-khac',
+            'is_active' => true,
+        ]);
+
+        $service = app(ProductService::class);
+        $product = $service->create([
+            'name' => 'Sản phẩm đa danh mục',
+            'slug' => 'san-pham-da-danh-muc',
+            'price' => 50000,
+            'category_ids' => [$child1->id, $child2->id, $other->id],
+            'is_active' => true,
+        ]);
+
+        $this->assertCount(3, $product->categories);
+        $this->assertEquals($child1->id, $product->category_id);
+
+        $systemCategory = Category::query()->create([
+            'name' => ['vi' => 'Danh mục hệ thống'],
+            'slug' => 'sys-cat',
+            'is_system' => true,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs(User::factory()->create());
+
+        $response = $this->delete("/vi/admin/categories/{$systemCategory->id}");
+        $response->assertSessionHas('error');
+        $this->assertTrue(Category::query()->where('id', $systemCategory->id)->exists());
+
+        $this->expectException(\RuntimeException::class);
+        $systemCategory->delete();
+    }
+
+    public function test_public_category_recursive_filtering(): void
+    {
+        FeatureSetting::query()->updateOrCreate(
+            ['feature_code' => 'catalog'],
+            ['is_enabled' => true]
+        );
+
+        $parent = Category::query()->create([
+            'name' => ['vi' => 'Danh mục cha'],
+            'slug' => 'danh-muc-cha',
+            'is_active' => true,
+        ]);
+
+        $child = Category::query()->create([
+            'parent_id' => $parent->id,
+            'name' => ['vi' => 'Danh mục con'],
+            'slug' => 'danh-muc-con',
+            'is_active' => true,
+        ]);
+
+        $service = app(ProductService::class);
+        $product = $service->create([
+            'name' => 'Sản phẩm trong danh mục con',
+            'slug' => 'sp-con',
+            'price' => 30000,
+            'category_ids' => [$child->id],
+            'is_active' => true,
+        ]);
+
+        $response = $this->getJson('/api/products?category_slug=danh-muc-cha');
+        $response->assertOk();
+
+        $data = $response->json('data');
+        $this->assertNotEmpty($data);
+        $this->assertEquals('sp-con', $data[0]['slug']);
+    }
+
+    public function test_product_update_checks_concurrency_conflict(): void
+    {
+        $category = Category::query()->create([
+            'name' => 'Con Danh Muc',
+            'slug' => 'con-danh-muc',
+            'is_active' => true,
+        ]);
+
+        $service = app(ProductService::class);
+        $product = $service->create([
+            'name' => 'Sản phẩm thử nghiệm',
+            'slug' => 'sp-thu-nghiem',
+            'price' => 50000,
+            'category_ids' => [$category->id],
+            'is_active' => true,
+        ]);
+
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $response1 = $this->putJson("/vi/admin/products/{$product->id}", [
+            'name' => 'Tên mới',
+            'price' => 60000,
+            'category_ids' => [$category->id],
+            'updated_at' => '2026-01-01T00:00:00+00:00',
+        ]);
+        $response1->assertStatus(409);
+
+        $response2 = $this->putJson("/vi/admin/products/{$product->id}", [
+            'name' => 'Tên mới',
+            'price' => 60000,
+            'category_ids' => [$category->id],
+            'updated_at' => $product->updated_at->toIso8601String(),
+        ]);
+        $response2->assertRedirect();
+    }
 }

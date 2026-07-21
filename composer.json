@@ -13,8 +13,18 @@
         "laravel/sanctum": "*",
         "laravel/tinker": "^2.10.1",
         "mcamara/laravel-localization": "^2.4",
-        "spatie/laravel-translatable": "^6.11"
+        "spatie/laravel-translatable": "^6.11",
+        "mbws/laravel-pagebuilder": "@dev"
     },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "modules/page-builder",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
     "require-dev": {
         "fakerphp/faker": "^1.23",
         "laravel/pail": "^1.2.2",

@@ -5,10 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\ProjectSetting;
-use App\Mail\OrderStatusMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class WebhookController extends Controller
 {
@@ -129,12 +127,8 @@ class WebhookController extends Controller
 
             // Send email if status changed
             if (isset($updates['status']) && $oldStatus !== $updates['status']) {
-                try {
-                    $order->load('items');
-                    Mail::to($order->customer_email)->send(new OrderStatusMail($order));
-                } catch (\Exception $e) {
-                    Log::error("Failed to send order status update email for Order {$order->id}: " . $e->getMessage());
-                }
+                $order->load('items');
+                app(\App\Services\NotificationService::class)->sendCustomerOrderStatus($order);
             }
         }
 

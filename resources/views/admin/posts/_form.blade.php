@@ -5,12 +5,38 @@
     $content = old('content', $post->getTranslation('content', app()->getLocale(), false) ?: $post->getTranslation('content', $fallbackLocale, false));
     $seoTitle = old('seo_title', $post->getTranslation('seo_title', app()->getLocale(), false) ?: $post->getTranslation('seo_title', $fallbackLocale, false));
     $seoDesc = old('seo_description', $post->getTranslation('seo_description', app()->getLocale(), false) ?: $post->getTranslation('seo_description', $fallbackLocale, false));
+    $publishStatus = (string) old('is_active', $post->exists && $post->is_active ? '1' : '0');
     $cancelUrl = route('admin.posts.index');
 @endphp
 
 <div class="row">
     <!-- Left column: Main Content and SEO -->
     <div class="col-lg-8">
+        @if ($errors->has('seo_gate'))
+            <div class="alert alert-danger" role="alert" aria-labelledby="seo-gate-error-title">
+                <h5 id="seo-gate-error-title" class="alert-heading fw-bold">Chưa thể xuất bản: SEO Gate chưa đạt 100%</h5>
+                <p>Không có dữ liệu nào bị mất. Bạn có thể sửa các mục dưới đây hoặc chuyển trạng thái sang <strong>Lưu nháp</strong>.</p>
+                <ul class="mb-0 ps-3">
+                    @foreach ($errors->get('seo_gate') as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <div class="alert {{ $seoStrictMode ? 'alert-warning' : 'alert-info' }} d-flex gap-3 align-items-start" role="status">
+            <iconify-icon icon="solar:shield-check-bold-duotone" class="fs-7 flex-shrink-0"></iconify-icon>
+            <div>
+                <strong>Chế độ SEO Gate nghiêm ngặt đang {{ $seoStrictMode ? 'bật' : 'tắt' }}.</strong>
+                @if ($seoStrictMode)
+                    Bản nháp luôn lưu được, nhưng chỉ bài đạt toàn bộ checklist và 100 điểm mới được xuất bản.
+                @else
+                    Hệ thống vẫn chấm điểm và cảnh báo, nhưng không chặn bạn xuất bản bài viết.
+                @endif
+                Hệ thống ưu tiên nội dung hữu ích, có nguồn và cấu trúc rõ ràng; không khuyến khích nhồi từ khóa.
+            </div>
+        </div>
+
         <!-- General Info Card -->
         <div class="card">
             <div class="card-body">
@@ -27,13 +53,17 @@
                 </div>
 
                 <div class="mb-4">
-                    <label class="form-label" for="summary">{{ __('admin.posts.fields.summary') }}</label>
-                    <textarea class="form-control" id="summary" name="summary" rows="3" placeholder="{{ __('admin.posts.placeholders.summary') }}">{{ $summary }}</textarea>
+                    <div class="d-flex justify-content-between gap-3">
+                        <label class="form-label" for="summary">{{ __('admin.posts.fields.summary') }} <span class="text-danger">*</span></label>
+                        <small class="text-muted"><span id="summary_count">0</span>/300</small>
+                    </div>
+                    <textarea class="form-control" id="summary" name="summary" rows="4" maxlength="300" placeholder="Viết câu trả lời trực tiếp 120–300 ký tự để người đọc và công cụ AI hiểu ngay nội dung chính.">{{ $summary }}</textarea>
+                    <p class="fs-2 text-muted mb-0">Phải có cụm từ khóa tự nhiên và trả lời thẳng vấn đề, không mở đầu vòng vo.</p>
                 </div>
 
                 <div class="mb-4">
                     <label class="form-label" for="content_input">{{ __('admin.posts.fields.content') }} <span class="text-danger">*</span></label>
-                    <textarea class="form-control d-none" id="content_input" name="content" required>{{ $content }}</textarea>
+                    <textarea class="form-control d-none" id="content_input" name="content">{{ $content }}</textarea>
                     <div id="content_editor" class="catalog-quill" data-target="content_input" style="height: 350px;">{!! $content !!}</div>
                 </div>
             </div>
@@ -46,18 +76,24 @@
                 
                 <div class="mb-4">
                     <label class="form-label" for="seo_keys">{{ __('admin.posts.fields.seo_keys') }} <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="seo_keys" name="seo_keys" value="{{ old('seo_keys', $post->seo_keys) }}" placeholder="{{ __('admin.posts.placeholders.focus_keyword') }}" required>
-                    <p class="fs-2 text-muted mb-0">{{ __('admin.posts.placeholders.focus_keyword_help') }}</p>
+                    <input type="text" class="form-control" id="seo_keys" name="seo_keys" value="{{ old('seo_keys', $post->seo_keys) }}" placeholder="{{ __('admin.posts.placeholders.focus_keyword') }}">
+                    <p class="fs-2 text-muted mb-0">Chỉ nhập một cụm 2–6 từ. Trường này dùng để kiểm tra biên tập, không xuất thành thẻ meta keywords.</p>
                 </div>
 
                 <div class="mb-4">
-                    <label class="form-label" for="seo_title">{{ __('admin.posts.fields.seo_title') }}</label>
-                    <input type="text" class="form-control" id="seo_title" name="seo_title" value="{{ $seoTitle }}" placeholder="{{ __('admin.posts.placeholders.seo_title') }}">
+                    <div class="d-flex justify-content-between gap-3">
+                        <label class="form-label" for="seo_title">{{ __('admin.posts.fields.seo_title') }} <span class="text-danger">*</span></label>
+                        <small class="text-muted"><span id="seo_title_count">0</span>/65</small>
+                    </div>
+                    <input type="text" class="form-control" id="seo_title" name="seo_title" value="{{ $seoTitle }}" maxlength="65" placeholder="Tiêu đề cuối cùng xuất ra thẻ title, 35–65 ký tự.">
                 </div>
 
                 <div class="mb-4">
-                    <label class="form-label" for="seo_description">{{ __('admin.posts.fields.seo_description') }}</label>
-                    <textarea class="form-control" id="seo_description" name="seo_description" rows="3" placeholder="{{ __('admin.posts.placeholders.seo_description') }}">{{ $seoDesc }}</textarea>
+                    <div class="d-flex justify-content-between gap-3">
+                        <label class="form-label" for="seo_description">{{ __('admin.posts.fields.seo_description') }} <span class="text-danger">*</span></label>
+                        <small class="text-muted"><span id="seo_description_count">0</span>/160</small>
+                    </div>
+                    <textarea class="form-control" id="seo_description" name="seo_description" rows="4" maxlength="160" placeholder="Mô tả riêng 120–160 ký tự, nêu rõ lợi ích và chủ đề bài viết.">{{ $seoDesc }}</textarea>
                 </div>
             </div>
         </div>
@@ -81,6 +117,7 @@
                      onclick="document.getElementById('post_image_file').click()">
                      
                     <img id="post_image_preview" src="{{ $post->image_url ?: '#' }}" 
+                         alt="Xem trước ảnh đại diện bài viết"
                          class="img-fluid rounded {{ $post->image_url ? '' : 'd-none' }}" 
                          style="max-height: 150px; object-fit: contain;">
                      
@@ -89,7 +126,7 @@
                         <div class="text-muted small">{{ __('admin.posts.placeholders.image_help') }}</div>
                     </div>
                 </div>
-                <p class="fs-2 text-center mb-0">{{ __('admin.posts.placeholders.image_types') }}</p>
+                <p class="fs-2 text-center mb-0">JPG, PNG hoặc WEBP tối đa 4 MB; ảnh tải mới bắt buộc tối thiểu <strong>1200×630 px</strong>.</p>
             </div>
         </div>
 
@@ -100,11 +137,15 @@
                     <h4 class="card-title">{{ __('admin.posts.sections.publish') }}</h4>
                     <div class="p-2 h-100 {{ old('is_active', $post->is_active) ? 'bg-success' : 'bg-danger' }} rounded-circle"></div>
                 </div>
-                <select class="form-select mb-2" name="is_active">
-                    <option value="1" @selected((string) old('is_active', $post->is_active) === '1')>{{ __('admin.posts.fields.active') }}</option>
-                    <option value="0" @selected((string) old('is_active', $post->is_active) === '0')>{{ __('admin.posts.fields.inactive') }}</option>
+                <select class="form-select mb-2" name="is_active" id="is_active">
+                    <option value="1" @selected($publishStatus === '1')>{{ __('admin.posts.fields.active') }}</option>
+                    <option value="0" @selected($publishStatus === '0')>{{ __('admin.posts.fields.inactive') }}</option>
                 </select>
-                <p class="fs-2 mb-0">{{ __('admin.posts.placeholders.status_help') }}</p>
+                <p class="fs-2 mb-0" id="publish_gate_hint">
+                    {{ $seoStrictMode
+                        ? 'Lưu nháp không bị chặn. Xuất bản yêu cầu SEO Gate đạt đủ 100 điểm.'
+                        : 'Mode nghiêm khắc đang tắt. Điểm SEO chỉ mang tính cảnh báo và không chặn xuất bản.' }}
+                </p>
             </div>
         </div>
 
@@ -129,17 +170,27 @@
             </div>
         </div>
 
-        <!-- Live SEO Analyzer Widget (Yoast Style) -->
-        <div class="card">
+        <!-- Live SEO Analyzer Widget -->
+        <style>
+            .seo-analyzer-card {
+                max-height: 647px;
+                overflow: auto;
+                scrollbar-width: none; /* Firefox */
+                -ms-overflow-style: none; /* IE 10+ */
+            }
+            .seo-analyzer-card::-webkit-scrollbar {
+                display: none; /* Safari and Chrome */
+            }
+        </style>
+        <div class="card seo-analyzer-card">
             <div class="card-body">
-                <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-3 border-bottom pb-2">
                     <h4 class="card-title mb-0 text-success d-flex align-items-center gap-2">
                         <iconify-icon icon="solar:ranking-bold-duotone" class="fs-6"></iconify-icon>{{ __('admin.posts.sections.seo_analysis') }}
                     </h4>
-                    <span class="badge bg-success text-white fw-bold px-2 py-1 fs-1" id="seo_overall_badge">{{ __('admin.posts.seo_widget.status_excellent') }}</span>
+                    <span class="badge bg-danger text-white fw-bold px-2 py-1 fs-1" id="seo_overall_badge">ĐANG KHÓA</span>
                 </div>
 
-                <!-- Circular Progress Score -->
                 <div class="text-center my-4 d-flex flex-column align-items-center justify-content-center">
                     <div class="position-relative d-inline-flex">
                         <svg class="seo-progress-ring" width="100" height="100">
@@ -155,53 +206,13 @@
                     </div>
                 </div>
 
-                <!-- Analysis Checklist -->
                 <div class="seo-checklist">
                     <h6 class="fs-2 fw-bold text-muted text-uppercase mb-3">{{ __('admin.posts.sections.seo_results') }}</h6>
-                    
-                    <div class="seo-rule-item" id="rule_keyword_exists">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.keyword_exists') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_title_length">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.title_length') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_title_keyword">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.title_keyword') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_slug_keyword">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.slug_keyword') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_desc_length">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.desc_length') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_desc_keyword">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.desc_keyword') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_content_length">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.content_length') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_keyword_density">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.keyword_density') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_first_paragraph">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.first_paragraph') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_headings">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.headings') }}</span>
-                    </div>
-                    <div class="seo-rule-item" id="rule_image_alts">
-                        <span class="seo-status-dot seo-status-red"></span>
-                        <span>{{ __('admin.posts.seo_widget.rules.image_alts') }}</span>
+                    <div id="seo_rules" aria-live="polite">
+                        <div class="seo-rule-item">
+                            <span class="seo-status-dot seo-status-orange"></span>
+                            <span>Đang gửi dữ liệu tới bộ phân tích SEO phía máy chủ…</span>
+                        </div>
                     </div>
                 </div>
             </div>

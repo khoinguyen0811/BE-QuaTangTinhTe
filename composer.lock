@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5b47ed27adc26b066fc39468bd19d59f",
+    "content-hash": "7a4cdd9662edde0d78d396dc52dc7ee0",
     "packages": [
         {
             "name": "brick/math",
@@ -1188,6 +1188,53 @@
             "time": "2026-06-12T21:33:43+00:00"
         },
         {
+            "name": "hansschouten/phpagebuilder",
+            "version": "v0.31.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/HansSchouten/PHPageBuilder.git",
+                "reference": "ec13bb04a16f6889baf84d1b5e5dc863d48148dd"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/HansSchouten/PHPageBuilder/zipball/ec13bb04a16f6889baf84d1b5e5dc863d48148dd",
+                "reference": "ec13bb04a16f6889baf84d1b5e5dc863d48148dd",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.0"
+            },
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "src/Core/helpers.php"
+                ],
+                "psr-4": {
+                    "PHPageBuilder\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Hans Schouten",
+                    "email": "hans@falcosolutions.nl"
+                }
+            ],
+            "description": "A drag and drop pagebuilder to manage pages in any PHP project.",
+            "homepage": "https://github.com/HansSchouten/PHPagebuilder",
+            "keywords": [
+                "pagebuilder"
+            ],
+            "support": {
+                "issues": "https://github.com/HansSchouten/PHPageBuilder/issues",
+                "source": "https://github.com/HansSchouten/PHPageBuilder/tree/v0.31.0"
+            },
+            "time": "2025-01-03T11:34:34+00:00"
+        },
+        {
             "name": "laravel/framework",
             "version": "v12.62.0",
             "source": {
@@ -2216,6 +2263,54 @@
                 }
             ],
             "time": "2026-03-08T20:05:35+00:00"
+        },
+        {
+            "name": "mbws/laravel-pagebuilder",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "modules/page-builder",
+                "reference": "120cc2a739eed64769aadf4bbac59b4e87db8659"
+            },
+            "require": {
+                "hansschouten/phpagebuilder": "^0.31",
+                "php": ">=8.2"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "HansSchouten\\LaravelPageBuilder\\ServiceProvider"
+                    ],
+                    "aliases": {
+                        "PageBuilder": "HansSchouten\\LaravelPageBuilder\\Facade"
+                    }
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "HansSchouten\\LaravelPageBuilder\\": "src/"
+                }
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Hans Schouten",
+                    "email": "hans@falcosolutions.nl"
+                }
+            ],
+            "description": "Forked drag and drop pagebuilder for QuaTangTinhTe backend project.",
+            "homepage": "https://github.com/HansSchouten/Laravel-Pagebuilder",
+            "keywords": [
+                "laravel",
+                "pagebuilder"
+            ],
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
         },
         {
             "name": "mcamara/laravel-localization",
@@ -8955,7 +9050,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "mbws/laravel-pagebuilder": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

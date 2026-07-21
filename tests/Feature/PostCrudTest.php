@@ -5,9 +5,12 @@ namespace Tests\Feature;
 use App\Models\FeatureSetting;
 use App\Models\Post;
 use App\Models\PostCategory;
+use App\Models\ProjectSetting;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class PostCrudTest extends TestCase
@@ -168,7 +171,7 @@ class PostCrudTest extends TestCase
             'seo_title' => 'Tiêu đề SEO bài viết mới',
             'seo_description' => 'Mô tả SEO cho bài viết mới để xem có chuẩn hay không',
             'seo_keys' => 'bài viết mới',
-            'is_active' => '1',
+            'is_active' => '0',
         ]);
 
         $response->assertRedirect('/vi/admin/posts');
@@ -177,8 +180,93 @@ class PostCrudTest extends TestCase
         $this->assertDatabaseHas('posts', [
             'slug' => 'bai-viet-moi-tinh',
             'category_id' => $this->category->id,
+            'is_active' => false,
+        ]);
+    }
+
+    public function test_admin_cannot_publish_post_that_fails_strict_seo_gate(): void
+    {
+        $response = $this->actingAs($this->adminUser)->post('/vi/admin/posts', [
+            'title' => 'Bài viết quá ngắn',
+            'slug' => 'bai-viet-qua-ngan',
+            'category_id' => $this->category->id,
+            'summary' => 'Tóm tắt ngắn.',
+            'content' => '<p>Nội dung chưa đủ tiêu chuẩn.</p>',
+            'seo_title' => 'SEO quá ngắn',
+            'seo_description' => 'Mô tả quá ngắn.',
+            'seo_keys' => 'bài viết',
+            'is_active' => '1',
+        ]);
+
+        $response->assertSessionHasErrors('seo_gate');
+        $this->assertDatabaseMissing('posts', ['slug' => 'bai-viet-qua-ngan']);
+    }
+
+    public function test_admin_can_publish_with_warnings_when_strict_seo_mode_is_disabled(): void
+    {
+        ProjectSetting::query()->updateOrCreate(
+            ['setting_key' => 'seo'],
+            ['setting_value' => ['strict_post_gate' => false]]
+        );
+
+        $payload = [
+            'title' => 'Bài viết ngắn khi tắt SEO Gate',
+            'slug' => 'bai-viet-ngan-khi-tat-seo-gate',
+            'category_id' => $this->category->id,
+            'summary' => 'Nội dung tóm tắt ngắn.',
+            'content' => '<p>Nội dung chưa đạt các tiêu chí SEO nghiêm khắc.</p>',
+            'seo_title' => 'SEO ngắn',
+            'seo_description' => 'Mô tả ngắn.',
+            'seo_keys' => 'bài viết',
+            'is_active' => '1',
+        ];
+
+        $response = $this->actingAs($this->adminUser)->post('/vi/admin/posts', $payload);
+
+        $response->assertRedirect('/vi/admin/posts')->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('posts', [
+            'slug' => 'bai-viet-ngan-khi-tat-seo-gate',
             'is_active' => true,
         ]);
+
+        $analysis = $this->actingAs($this->adminUser)->postJson('/vi/admin/posts/seo-analyze', $payload);
+        $analysis->assertOk()
+            ->assertJsonPath('ready_to_publish', false)
+            ->assertJsonPath('strict_mode_enabled', false)
+            ->assertJsonPath('publishing_allowed', true);
+    }
+
+    public function test_admin_can_publish_post_only_when_every_strict_seo_rule_passes(): void
+    {
+        Storage::fake('public');
+        $payload = $this->strictSeoPayload();
+        $payload['image_file'] = UploadedFile::fake()->image('qua-tang-pha-le.jpg', 1200, 630);
+
+        $response = $this->actingAs($this->adminUser)->post('/vi/admin/posts', $payload);
+
+        $response->assertRedirect('/vi/admin/posts');
+        $response->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('posts', [
+            'slug' => 'huong-dan-chon-qua-tang-pha-le',
+            'is_active' => true,
+        ]);
+    }
+
+    public function test_live_seo_analyzer_uses_the_same_publish_rules(): void
+    {
+        $payload = $this->strictSeoPayload();
+        $payload['has_featured_image'] = true;
+        $payload['featured_image_width'] = 1200;
+        $payload['featured_image_height'] = 630;
+
+        $response = $this->actingAs($this->adminUser)
+            ->postJson('/vi/admin/posts/seo-analyze', $payload);
+
+        $response->assertOk()
+            ->assertJsonPath('score', 100)
+            ->assertJsonPath('ready_to_publish', true)
+            ->assertJsonPath('strict_mode_enabled', true)
+            ->assertJsonPath('publishing_allowed', true);
     }
 
     public function test_admin_can_update_post(): void
@@ -251,5 +339,38 @@ class PostCrudTest extends TestCase
         $postsStatus = $responseStatus->viewData('posts');
         $this->assertTrue($postsStatus->contains($draftPost));
         $this->assertFalse($postsStatus->contains($this->post));
+    }
+
+    private function strictSeoPayload(): array
+    {
+        $filler = implode(' ', array_fill(
+            0,
+            14,
+            'kinh nghiệm thực tế giúp người đọc hiểu rõ tiêu chí lựa chọn phù hợp và tránh quyết định thiếu thông tin'
+        ));
+
+        return [
+            'title' => 'Hướng dẫn chọn quà tặng pha lê đúng dịp và ngân sách',
+            'slug' => 'huong-dan-chon-qua-tang-pha-le',
+            'category_id' => $this->category->id,
+            'summary' => 'Quà tặng pha lê phù hợp cần được chọn theo người nhận, dịp tặng, ngân sách và chất lượng hoàn thiện; hướng dẫn này giúp bạn so sánh từng tiêu chí trước khi đặt làm.',
+            'content' => implode('', [
+                '<p>Quà tặng pha lê nên được chọn theo mục đích sử dụng, người nhận và thông điệp cần lưu giữ. '.$filler.'</p>',
+                '<h2>Xác định đúng người nhận và dịp tặng</h2>',
+                '<p>'.$filler.'</p>',
+                '<p>'.$filler.' <a href="/collection">tham khảo bộ sưu tập pha lê theo dịp</a>.</p>',
+                '<h2>So sánh chất liệu và kỹ thuật hoàn thiện</h2>',
+                '<p>'.$filler.'</p>',
+                '<ul><li>Kiểm tra độ trong và bề mặt.</li><li>Xác nhận nội dung khắc.</li><li>Đối chiếu thời gian hoàn thiện.</li></ul>',
+                '<p>'.$filler.' <a href="/contact">liên hệ đội ngũ tư vấn thiết kế</a>.</p>',
+                '<h2>Kiểm tra thông tin trước khi đặt hàng</h2>',
+                '<p>'.$filler.'</p>',
+                '<p>'.$filler.' Tham khảo thêm <a href="https://developers.google.com/search/docs/fundamentals/creating-helpful-content">hướng dẫn nội dung hữu ích của Google</a>.</p>',
+            ]),
+            'seo_title' => 'Cách chọn quà tặng pha lê đúng dịp và ngân sách',
+            'seo_description' => 'Khám phá cách chọn quà tặng pha lê theo người nhận, dịp tặng, ngân sách và chất lượng hoàn thiện để đặt món quà phù hợp, có ý nghĩa lâu dài.',
+            'seo_keys' => 'quà tặng pha lê',
+            'is_active' => '1',
+        ];
     }
 }

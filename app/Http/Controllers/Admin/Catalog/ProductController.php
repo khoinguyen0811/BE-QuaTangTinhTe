@@ -84,7 +84,7 @@ class ProductController extends Controller
     public function show(string $locale, Product $product)
     {
         return view('admin.catalog.products.show', [
-            'product' => $product->load(['category', 'variants']),
+            'product' => $product->load(['category', 'categories', 'variants']),
         ]);
     }
 
@@ -99,6 +99,14 @@ class ProductController extends Controller
 
     public function update(ProductRequest $request, string $locale, Product $product)
     {
+        $expectedUpdatedAt = $request->input('updated_at');
+        if ($expectedUpdatedAt && $product->updated_at && $product->updated_at->toIso8601String() !== $expectedUpdatedAt) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Sản phẩm đã được chỉnh sửa bởi một người khác. Vui lòng tải lại trang.'], 409);
+            }
+            return back()->withInput()->with('error', 'Sản phẩm đã được chỉnh sửa bởi một người khác. Vui lòng tải lại trang.');
+        }
+
         $data = $request->validated();
         if ($request->hasFile('image_file')) {
             $cloudinaryService = app(\App\Services\CloudinaryService::class);

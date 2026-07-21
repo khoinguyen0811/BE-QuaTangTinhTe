@@ -70,9 +70,29 @@ class Product extends Model
         'limited_max_stock' => 'integer',
     ];
 
+    protected static function booted()
+    {
+        static::saved(function ($product) {
+            if ($product->category_id) {
+                $currentPivotIds = $product->categories()->pluck('categories.id')->toArray();
+                if (empty($currentPivotIds)) {
+                    $product->categories()->sync([$product->category_id]);
+                } elseif ($currentPivotIds[0] !== (int)$product->category_id) {
+                    $newPivotIds = array_unique(array_merge([(int)$product->category_id], $currentPivotIds));
+                    $product->categories()->sync(array_slice($newPivotIds, 0, 3));
+                }
+            }
+        });
+    }
+
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function categories()
+    {
+        return $this->belongsToMany(Category::class, 'category_product');
     }
 
     public function brand()

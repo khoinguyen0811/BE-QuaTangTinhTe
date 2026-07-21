@@ -19,6 +19,9 @@ class OrderItem extends Model
         'price',
         'quantity',
         'total',
+        'custom_text',
+        'custom_image_name',
+        'custom_image_url',
     ];
 
     protected $casts = [

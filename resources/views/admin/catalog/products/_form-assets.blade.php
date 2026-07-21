@@ -149,7 +149,14 @@
             }
 
             if (window.jQuery) {
-                $('.catalog-select2').select2({ width: '100%' });
+                $('.catalog-select2').each(function() {
+                    let select = $(this);
+                    let opts = { width: '100%' };
+                    if (select.attr('multiple')) {
+                        opts.maximumSelectionLength = 3;
+                    }
+                    select.select2(opts);
+                });
                 $('.email-repeater').repeater({
                     show: function () {
                         $(this).slideDown();

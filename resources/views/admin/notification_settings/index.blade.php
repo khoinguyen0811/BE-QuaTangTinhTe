@@ -61,18 +61,37 @@
                             </div>
                             <div class="col-md-12 mb-3">
                                 <label class="form-label fw-semibold text-dark" for="zalo_oa_secret_key">{{ __('admin.notification_settings.zalo_oa.secret_key') }}</label>
-                                <input type="password" class="form-control text-dark" id="zalo_oa_secret_key" name="zalo_oa[secret_key]" 
-                                    value="{{ data_get($settings, 'zalo_oa.secret_key') }}" placeholder="{{ __('admin.notification_settings.placeholder_enter', ['field' => __('admin.notification_settings.zalo_oa.secret_key')]) }}">
+                                <input type="password" class="form-control text-dark" id="zalo_oa_secret_key" name="zalo_oa[secret_key]"
+                                    value="" data-secret="true" data-configured="{{ data_get($configuredSecrets, 'zalo_oa.secret_key', false) ? 'true' : 'false' }}"
+                                    autocomplete="new-password" placeholder="{{ data_get($configuredSecrets, 'zalo_oa.secret_key', false) ? 'Đã lưu bảo mật — để trống nếu không đổi' : __('admin.notification_settings.placeholder_enter', ['field' => __('admin.notification_settings.zalo_oa.secret_key')]) }}">
                             </div>
                             <div class="col-md-12 mb-3">
                                 <label class="form-label fw-semibold text-dark" for="zalo_oa_access_token">{{ __('admin.notification_settings.zalo_oa.access_token') }}</label>
-                                <textarea class="form-control text-dark" id="zalo_oa_access_token" name="zalo_oa[access_token]" rows="2" 
-                                    placeholder="{{ __('admin.notification_settings.placeholder_enter', ['field' => __('admin.notification_settings.zalo_oa.access_token')]) }}">{{ data_get($settings, 'zalo_oa.access_token') }}</textarea>
+                                <textarea class="form-control text-dark" id="zalo_oa_access_token" name="zalo_oa[access_token]" rows="2"
+                                    data-secret="true" data-configured="{{ data_get($configuredSecrets, 'zalo_oa.access_token', false) ? 'true' : 'false' }}"
+                                    placeholder="{{ data_get($configuredSecrets, 'zalo_oa.access_token', false) ? 'Đã lưu bảo mật — để trống nếu không đổi' : __('admin.notification_settings.placeholder_enter', ['field' => __('admin.notification_settings.zalo_oa.access_token')]) }}"></textarea>
                             </div>
                             <div class="col-md-12 mb-3">
                                 <label class="form-label fw-semibold text-dark" for="zalo_oa_refresh_token">{{ __('admin.notification_settings.zalo_oa.refresh_token') }}</label>
-                                <textarea class="form-control text-darkThông báo qua Zalo Cá Nhân" id="zalo_oa_refresh_token" name="zalo_oa[refresh_token]" rows="2" 
-                                    placeholder="{{ __('admin.notification_settings.placeholder_enter', ['field' => __('admin.notification_settings.zalo_oa.refresh_token')]) }}">{{ data_get($settings, 'zalo_oa.refresh_token') }}</textarea>
+                                <textarea class="form-control text-dark" id="zalo_oa_refresh_token" name="zalo_oa[refresh_token]" rows="2"
+                                    data-secret="true" data-configured="{{ data_get($configuredSecrets, 'zalo_oa.refresh_token', false) ? 'true' : 'false' }}"
+                                    placeholder="{{ data_get($configuredSecrets, 'zalo_oa.refresh_token', false) ? 'Đã lưu bảo mật — để trống nếu không đổi' : __('admin.notification_settings.placeholder_enter', ['field' => __('admin.notification_settings.zalo_oa.refresh_token')]) }}"></textarea>
+                            </div>
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label fw-semibold text-dark" for="zalo_oa_template_data">Dữ liệu biến của template (JSON)</label>
+                                <textarea class="form-control font-monospace text-dark" id="zalo_oa_template_data" name="zalo_oa[template_data]" rows="4"
+                                    placeholder='{"order_code":"order-123"}'>{{ data_get($settings, 'zalo_oa.template_data') }}</textarea>
+                                <div class="form-text">Có thể dùng: @{{order_number}}, @{{customer_name}}, @{{status}}, @{{grand_total}}. Tên khóa phải khớp template đã duyệt trên Zalo.</div>
+                            </div>
+                            <div class="col-md-7 mb-0">
+                                <label class="form-label fw-semibold text-dark" for="zalo_oa_test_phone">Số điện thoại gửi thử</label>
+                                <input type="text" class="form-control text-dark" id="zalo_oa_test_phone" name="zalo_oa_test_phone" placeholder="0901234567">
+                            </div>
+                            <div class="col-md-5 mb-0 d-flex align-items-end">
+                                <button class="btn btn-outline-primary w-100" type="button" id="btn_test_zalo_oa">
+                                    <iconify-icon icon="solar:plain-2-line-duotone" class="align-middle me-1"></iconify-icon>
+                                    Gửi Zalo OA thử
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -102,8 +121,9 @@
                             <div class="col-md-8">
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-dark" for="zalo_personal_bot_token">{{ __('admin.notification_settings.zalo_personal.bot_token') }}</label>
-                                    <input type="text" class="form-control text-dark" id="zalo_personal_bot_token" name="zalo_personal[bot_token]" 
-                                        value="{{ data_get($settings, 'zalo_personal.bot_token') }}" placeholder="{{ __('admin.notification_settings.zalo_personal.bot_token_placeholder') }}">
+                                    <input type="text" class="form-control text-dark" id="zalo_personal_bot_token" name="zalo_personal[bot_token]"
+                                        value="" data-secret="true" data-configured="{{ data_get($configuredSecrets, 'zalo_personal.bot_token', false) ? 'true' : 'false' }}"
+                                        autocomplete="off" placeholder="{{ data_get($configuredSecrets, 'zalo_personal.bot_token', false) ? 'Đã lưu bảo mật — để trống nếu không đổi' : __('admin.notification_settings.zalo_personal.bot_token_placeholder') }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-dark" for="zalo_personal_chat_id">{{ __('admin.notification_settings.zalo_personal.chat_id') }}</label>
@@ -124,6 +144,12 @@
                                     <img src="https://bot.zapps.me/images/zbot-creator_qrcode.jpg" alt="Zalo Bot QR Code" class="img-fluid rounded">
                                 </div>
                             </div>
+                        </div>
+                        <div class="d-flex justify-content-end mt-3">
+                            <button class="btn btn-outline-success" type="button" id="btn_test_zalo_personal">
+                                <iconify-icon icon="solar:plain-2-line-duotone" class="align-middle me-1"></iconify-icon>
+                                Gửi thông báo thử
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -159,8 +185,9 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label fw-semibold text-dark" for="smtp_password">{{ __('admin.notification_settings.smtp.password_app') }}</label>
-                                <input type="password" class="form-control text-dark" id="smtp_password" name="smtp[password]" 
-                                    value="{{ data_get($settings, 'smtp.password') }}" placeholder="xxxx xxxx xxxx xxxx">
+                                <input type="password" class="form-control text-dark" id="smtp_password" name="smtp[password]"
+                                    value="" data-secret="true" data-configured="{{ data_get($configuredSecrets, 'smtp.password', false) ? 'true' : 'false' }}"
+                                    autocomplete="new-password" placeholder="{{ data_get($configuredSecrets, 'smtp.password', false) ? 'Đã lưu bảo mật — để trống nếu không đổi' : 'xxxx xxxx xxxx xxxx' }}">
                             </div>
                             <div class="col-md-12 mb-3">
                                 <label class="form-label fw-semibold text-dark" for="smtp_owner_email">{{ __('admin.notification_settings.smtp.owner_email_system') }}</label>
@@ -214,6 +241,15 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                            <div class="col-12 mt-3">
+                                <div class="alert alert-info py-2 px-3 small mb-3">
+                                    Với Gmail, hãy dùng <strong>App Password</strong> thay cho mật khẩu đăng nhập. Nhấn gửi thử để xác nhận trước khi vận hành.
+                                </div>
+                                <button class="btn btn-outline-info w-100" type="button" id="btn_test_smtp">
+                                    <iconify-icon icon="solar:letter-opened-line-duotone" class="align-middle me-1"></iconify-icon>
+                                    Gửi email kiểm tra đến email nhận thông báo
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -362,7 +398,8 @@
             { id: 'zalo_oa_template_id', name: "{{ __('admin.notification_settings.zalo_oa.template_id') }}" },
             { id: 'zalo_oa_secret_key', name: "{{ __('admin.notification_settings.zalo_oa.secret_key') }}" },
             { id: 'zalo_oa_access_token', name: "{{ __('admin.notification_settings.zalo_oa.access_token') }}" },
-            { id: 'zalo_oa_refresh_token', name: "{{ __('admin.notification_settings.zalo_oa.refresh_token') }}" }
+            { id: 'zalo_oa_refresh_token', name: "{{ __('admin.notification_settings.zalo_oa.refresh_token') }}" },
+            { id: 'zalo_oa_template_data', name: 'Dữ liệu biến của template' }
         ],
         'zalo_personal_enabled': [
             { id: 'zalo_personal_bot_token', name: "{{ __('admin.notification_settings.zalo_personal.bot_token') }}" },
@@ -400,7 +437,7 @@
 
                 channelFields[switchId].forEach(field => {
                     const input = document.getElementById(field.id);
-                    if (input && !input.value.trim()) {
+                    if (input && !input.value.trim() && input.dataset.configured !== 'true') {
                         emptyFields.push(field.name);
                         if (!firstEmptyInput) {
                             firstEmptyInput = input;
@@ -436,6 +473,12 @@
         });
     });
 
+    // Dashboard switches do not require credentials, but must still persist immediately.
+    ['dashboard_enabled', 'dashboard_play_sound', 'dashboard_auto_refresh'].forEach(switchId => {
+        const toggle = document.getElementById(switchId);
+        toggle?.addEventListener('change', autoSaveSettings);
+    });
+
     // Helper to validate the entire form (checks active channels have required fields)
     function validateForm() {
         let isValid = true;
@@ -445,7 +488,7 @@
                 const emptyFields = [];
                 channelFields[switchId].forEach(field => {
                     const input = document.getElementById(field.id);
-                    if (input && !input.value.trim()) {
+                    if (input && !input.value.trim() && input.dataset.configured !== 'true') {
                         emptyFields.push(field.name);
                     }
                 });
@@ -486,6 +529,13 @@
         })
         .then(({ ok, data }) => {
             if (ok && data && data.success) {
+                document.querySelectorAll('#notificationSettingsForm [data-secret="true"]').forEach(input => {
+                    if (input.value.trim()) {
+                        input.dataset.configured = 'true';
+                        input.value = '';
+                        input.placeholder = 'Đã lưu bảo mật — để trống nếu không đổi';
+                    }
+                });
                 Swal.fire({
                     toast: true,
                     position: 'top-end',
@@ -538,7 +588,7 @@
             const botTokenInput = document.getElementById('zalo_personal_bot_token');
             const botToken = botTokenInput ? botTokenInput.value.trim() : '';
 
-            if (!botToken) {
+            if (!botToken && botTokenInput?.dataset.configured !== 'true') {
                 Swal.fire({
                     icon: 'warning',
                     title: "{{ __('admin.notification_settings.validation_title') }}",
@@ -730,6 +780,61 @@
 
     // Trigger auto-retrieval on load
     setTimeout(checkAndAutoRetrieveChatId, 500);
+
+    async function runNotificationTest(url, button) {
+        const form = document.getElementById('notificationSettingsForm');
+        const originalHtml = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang kiểm tra...';
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                body: new FormData(form),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                }
+            });
+            const data = await response.json();
+
+            await Swal.fire({
+                icon: response.ok && data.success ? 'success' : 'error',
+                title: response.ok && data.success ? 'Kết nối thành công' : 'Kiểm tra chưa thành công',
+                text: data.message || 'Không thể kiểm tra kết nối.',
+                confirmButtonText: 'OK'
+            });
+        } catch (error) {
+            console.error('Notification connection test failed:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Lỗi kết nối',
+                text: 'Không thể kết nối đến máy chủ. Vui lòng thử lại.'
+            });
+        } finally {
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+        }
+    }
+
+    const smtpTestButton = document.getElementById('btn_test_smtp');
+    smtpTestButton?.addEventListener('click', () => runNotificationTest(
+        "{{ route('admin.notification-settings.test-smtp') }}",
+        smtpTestButton
+    ));
+
+    const zaloOaTestButton = document.getElementById('btn_test_zalo_oa');
+    zaloOaTestButton?.addEventListener('click', () => runNotificationTest(
+        "{{ route('admin.notification-settings.test-zalo-oa') }}",
+        zaloOaTestButton
+    ));
+
+    const zaloTestButton = document.getElementById('btn_test_zalo_personal');
+    zaloTestButton?.addEventListener('click', () => runNotificationTest(
+        "{{ route('admin.notification-settings.test-zalo-personal') }}",
+        zaloTestButton
+    ));
 
     // Auto-sync smtp_username with smtp_from_email for convenience
     const usernameInput = document.getElementById('smtp_username');

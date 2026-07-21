@@ -130,8 +130,8 @@ class CategoryController extends Controller
 
     public function destroy(string $locale, Category $category)
     {
-        if ($category->slug === 'chua-phan-loai') {
-            return back()->with('error', __('catalog.categories.delete_default_blocked'));
+        if ($category->is_system) {
+            return back()->with('error', 'Không thể xóa danh mục hệ thống.');
         }
 
         if ($category->children()->exists()) {
@@ -155,10 +155,36 @@ class CategoryController extends Controller
             ]
         );
 
-        // Reassign products to the default category
-        $category->products()->update(['category_id' => $defaultCategory->id]);
+        // Reassign products to the default category inside transaction
+        \Illuminate\Support\Facades\DB::transaction(function () use ($category, $defaultCategory) {
+            $lockedCategory = Category::query()->lockForUpdate()->findOrFail($category->id);
+            $productsToReassign = $lockedCategory->products()->get();
+            $productIds = $productsToReassign->pluck('id')->toArray();
 
-        $this->categories->delete($category);
+            if (!empty($productIds)) {
+                // Remove pivot mappings for the deleted category first
+                \Illuminate\Support\Facades\DB::table('category_product')
+                    ->where('category_id', $lockedCategory->id)
+                    ->whereIn('product_id', $productIds)
+                    ->delete();
+
+                foreach ($productsToReassign as $prod) {
+                    $remainingCategoryIds = $prod->categories()->pluck('categories.id')->toArray();
+                    if (empty($remainingCategoryIds)) {
+                        \Illuminate\Support\Facades\DB::table('category_product')->insertOrIgnore([
+                            'product_id' => $prod->id,
+                            'category_id' => $defaultCategory->id,
+                        ]);
+                        $prod->category_id = $defaultCategory->id;
+                    } else {
+                        $prod->category_id = $remainingCategoryIds[0];
+                    }
+                    $prod->save();
+                }
+            }
+
+            $lockedCategory->delete();
+        });
 
         return redirect()
             ->route('admin.categories.index')

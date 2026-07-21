@@ -19,13 +19,59 @@ class ProductService
             throw new RuntimeException(__('catalog.products.limit_reached', ['limit' => $limit]));
         }
 
-        return DB::transaction(fn () => Product::query()->create($this->payload($data)));
+        return DB::transaction(function () use ($data) {
+            $product = Product::query()->create($this->payload($data));
+
+            // Sync categories if present
+            $categoryIds = $data['category_ids'] ?? [];
+            if (!is_array($categoryIds)) {
+                $categoryIds = !empty($categoryIds) ? [$categoryIds] : [];
+            }
+            $categoryIds = array_slice(array_filter(array_map('intval', $categoryIds)), 0, 3);
+            if (empty($categoryIds)) {
+                $categoryIds = [$product->category_id ?: 0];
+            } else {
+                $product->category_id = $categoryIds[0];
+                $product->save();
+            }
+            $product->categories()->sync(array_filter($categoryIds));
+
+            // Sync variants if present in the payload
+            if (array_key_exists('variants', $data)) {
+                $this->syncVariants($product, $data['variants']);
+            }
+
+            return $product;
+        });
     }
 
     public function update(Product $product, array $data): Product
     {
         return DB::transaction(function () use ($product, $data) {
             $product->update($this->payload($data, $product));
+
+            // Sync categories if present
+            if (array_key_exists('category_ids', $data)) {
+                $categoryIds = $data['category_ids'] ?? [];
+                if (!is_array($categoryIds)) {
+                    $categoryIds = !empty($categoryIds) ? [$categoryIds] : [];
+                }
+                $categoryIds = array_slice(array_filter(array_map('intval', $categoryIds)), 0, 3);
+                if (empty($categoryIds)) {
+                    $categoryIds = [$product->category_id ?: 0];
+                } else {
+                    $product->category_id = $categoryIds[0];
+                    $product->save();
+                }
+                $product->categories()->sync(array_filter($categoryIds));
+            } elseif (array_key_exists('category_id', $data)) {
+                $product->categories()->sync(array_filter([$product->category_id]));
+            }
+
+            // Sync variants if present in the payload
+            if (array_key_exists('variants', $data)) {
+                $this->syncVariants($product, $data['variants']);
+            }
 
             return $product->refresh();
         });
@@ -38,12 +84,54 @@ class ProductService
 
     public function createVariant(Product $product, array $data): ProductVariant
     {
-        return DB::transaction(fn () => $product->variants()->create($this->variantPayload($data)));
+        return DB::transaction(function () use ($product, $data) {
+            // Compute primary image and set image_url if images is provided
+            $images = $data['images'] ?? [];
+            $primaryUrl = null;
+            if (!empty($images) && is_array($images)) {
+                $hasPrimary = false;
+                foreach ($images as &$img) {
+                    if (is_array($img) && !empty($img['is_primary'])) {
+                        $primaryUrl = $img['url'] ?? null;
+                        $hasPrimary = true;
+                        break;
+                    }
+                }
+                if (!$hasPrimary && isset($images[0]['url'])) {
+                    $images[0]['is_primary'] = true;
+                    $primaryUrl = $images[0]['url'];
+                }
+            }
+            $data['image_url'] = $primaryUrl ?: $data['image_url'] ?? null;
+            $data['images'] = $images;
+
+            return $product->variants()->create($this->variantPayload($data));
+        });
     }
 
     public function updateVariant(ProductVariant $variant, array $data): ProductVariant
     {
         return DB::transaction(function () use ($variant, $data) {
+            // Compute primary image and set image_url if images is provided
+            $images = $data['images'] ?? [];
+            $primaryUrl = null;
+            if (!empty($images) && is_array($images)) {
+                $hasPrimary = false;
+                foreach ($images as &$img) {
+                    if (is_array($img) && !empty($img['is_primary'])) {
+                        $primaryUrl = $img['url'] ?? null;
+                        $hasPrimary = true;
+                        break;
+                    }
+                }
+                if (!$hasPrimary && isset($images[0]['url'])) {
+                    $images[0]['is_primary'] = true;
+                    $primaryUrl = $images[0]['url'];
+                }
+            }
+            $data['image_url'] = $primaryUrl ?: $data['image_url'] ?? null;
+            $data['images'] = $images;
+
             $variant->update($this->variantPayload($data, $variant));
 
             return $variant->refresh();
@@ -53,6 +141,77 @@ class ProductService
     public function deleteVariant(ProductVariant $variant): void
     {
         DB::transaction(fn () => $variant->delete());
+    }
+
+    private function syncVariants(Product $product, array $variantsData): void
+    {
+        $existingVariantIds = $product->variants()->pluck('id')->toArray();
+        $submittedVariantIds = [];
+
+        foreach ($variantsData as $variantData) {
+            $id = $variantData['id'] ?? null;
+
+            // Handle color/material/size fields mapping to option values if option_names not explicitly sent
+            if (!isset($variantData['option_names']) && !isset($variantData['option_values'])) {
+                $optionNames = [];
+                $optionValues = [];
+                foreach (['size', 'color', 'material', 'style'] as $optionName) {
+                    if (isset($variantData[$optionName]) && $variantData[$optionName] !== '') {
+                        $optionNames[] = ucfirst($optionName);
+                        $optionValues[] = $variantData[$optionName];
+                    }
+                }
+                $variantData['option_names'] = $optionNames;
+                $variantData['option_values'] = $optionValues;
+            }
+
+            // Compute primary image and set image_url
+            $images = $variantData['images'] ?? [];
+            $primaryUrl = null;
+            if (!empty($images) && is_array($images)) {
+                $hasPrimary = false;
+                foreach ($images as &$img) {
+                    if (is_array($img) && !empty($img['is_primary'])) {
+                        $primaryUrl = $img['url'] ?? null;
+                        $hasPrimary = true;
+                        break;
+                    }
+                }
+                if (!$hasPrimary && isset($images[0]['url'])) {
+                    $images[0]['is_primary'] = true;
+                    $primaryUrl = $images[0]['url'];
+                }
+            }
+            $variantData['image_url'] = $primaryUrl ?: $variantData['image_url'] ?? null;
+            $variantData['images'] = $images;
+
+            if ($id) {
+                // UPDATE
+                $id = (int)$id;
+                if (!in_array($id, $existingVariantIds, true)) {
+                    // Prevent security hijack
+                    $belongsToOther = ProductVariant::query()->where('id', $id)->where('product_id', '!=', $product->id)->exists();
+                    if ($belongsToOther) {
+                        abort(403, 'Unauthorized access to variant.');
+                    }
+                    continue;
+                }
+
+                $variant = ProductVariant::query()->findOrFail($id);
+                $variant->update($this->variantPayload($variantData, $variant));
+                $submittedVariantIds[] = $id;
+            } else {
+                // CREATE
+                $variant = $product->variants()->create($this->variantPayload($variantData));
+                $submittedVariantIds[] = $variant->id;
+            }
+        }
+
+        // Set missing variants to inactive instead of deleting (safety first)
+        $inactiveIds = array_diff($existingVariantIds, $submittedVariantIds);
+        if (!empty($inactiveIds)) {
+            ProductVariant::query()->whereIn('id', $inactiveIds)->update(['is_active' => false]);
+        }
     }
 
     private function payload(array $data, ?Product $product = null): array
@@ -107,7 +266,11 @@ class ProductService
             'sku' => $data['sku'],
             'option_values' => $this->optionValues($data),
             'price' => $data['price'] ?? null,
+            'compare_at_price' => $data['compare_at_price'] ?? null,
             'stock_quantity' => (int) ($data['stock_quantity'] ?? 0),
+            'allow_out_of_stock_order' => (bool) ($data['allow_out_of_stock_order'] ?? false),
+            'image_url' => $data['image_url'] ?? null,
+            'images' => isset($data['images']) ? $data['images'] : null,
             'is_active' => (bool) ($data['is_active'] ?? false),
             'sort_order' => (int) ($data['sort_order'] ?? 0),
         ];

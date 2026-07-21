@@ -285,6 +285,15 @@
                               @endcan
                           @endif
 
+                          <!-- Trang tĩnh (Custom Pages) -->
+                          @can('viewAny', \App\Models\CustomPage::class)
+                          <li class="sidebar-item">
+                              <a class="sidebar-link" href="{{ route('pagebuilder.pages.index', ['locale' => app()->getLocale()]) }}" aria-expanded="false">
+                                  <iconify-icon icon="solar:document-bold-duotone"></iconify-icon>
+                                  <span class="hide-menu">Quản lý Trang Tĩnh</span>
+                              </a>
+                          </li>
+                          @endcan
 
                           <!-- Quản lý người dùng -->
                           @if(auth()->check() && (auth()->user()->isSuperAdmin() || app(\App\Support\FeatureGate::class)->enabled('multi_admin')))

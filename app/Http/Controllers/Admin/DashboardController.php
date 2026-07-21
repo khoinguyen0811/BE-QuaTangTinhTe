@@ -4,13 +4,36 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\FeatureSetting;
-use App\Models\ProjectSubscription;
 use App\Models\Order;
+use App\Models\ProjectSubscription;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    public function notificationStatus(Request $request)
+    {
+        $settings = app(\App\Services\NotificationSettingsService::class)->get(false);
+        if (! data_get($settings, 'dashboard.enabled', true)) {
+            return response()->json(['enabled' => false]);
+        }
+
+        $sinceId = max(0, (int) $request->query('since_id', 0));
+        $order = Order::query()->where('id', '>', $sinceId)->latest('id')->first();
+
+        return response()->json([
+            'enabled' => true,
+            'latest_id' => (int) (Order::query()->max('id') ?? 0),
+            'new_order' => $order ? [
+                'id' => $order->id,
+                'title' => 'Đơn hàng mới #' . $order->order_number,
+                'message' => $order->customer_name . ' · ' . number_format((float) $order->grand_total, 0, ',', '.') . ' ₫',
+                'url' => route('admin.orders.show', $order),
+            ] : null,
+        ]);
+    }
+
     public function index()
     {
         // 1. Key Metrics

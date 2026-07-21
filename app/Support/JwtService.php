@@ -27,6 +27,7 @@ class JwtService
             'email' => $user->email,
             'full_name' => $user->name,
             'roles' => $user->role ? [$user->role->name] : [],
+            'permissions' => $user->role?->permissions ?? [],
             'iat' => time(),
             'exp' => time() + $expirationSeconds,
         ];

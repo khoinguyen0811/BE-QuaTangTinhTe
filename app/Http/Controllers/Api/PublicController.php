@@ -6,18 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Order;
+use App\Models\Post;
+use App\Models\PostCategory;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\ProjectSetting;
 use App\Models\Review;
 use App\Models\Voucher;
 
+use App\Services\CloudinaryService;
 use App\Support\ApiResponse;
-use App\Mail\OrderStatusMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -107,14 +108,58 @@ class PublicController extends Controller
      */
     public function products(Request $request)
     {
-        $query = Product::query()->where('is_active', true);
+        $query = Product::query();
+        if (!$request->boolean('include_inactive')) {
+            $query->where('is_active', true);
+        }
+
+        // Filter by specific IDs and maintain exact order
+        if ($request->filled('ids')) {
+            $ids = $request->input('ids');
+            if (is_string($ids)) {
+                $ids = explode(',', $ids);
+            }
+            $ids = array_filter(array_map('intval', $ids));
+            if (!empty($ids)) {
+                $query->whereIn('id', $ids);
+                
+                $idsString = implode(',', $ids);
+                if (config('database.default') === 'sqlite') {
+                    $cases = [];
+                    foreach ($ids as $index => $id) {
+                        $cases[] = "WHEN id = {$id} THEN {$index}";
+                    }
+                    $query->orderByRaw("CASE " . implode(' ', $cases) . " ELSE 9999 END");
+                } else {
+                    $query->orderByRaw("FIELD(id, {$idsString})");
+                }
+            }
+        }
 
         // Filter by Category
+        $cat = null;
         if ($request->filled('category')) {
             $cat = $request->input('category');
-            $query->whereHas('category', function ($q) use ($cat) {
-                $q->where('id', $cat)->orWhere('slug', $cat);
-            });
+        } elseif ($request->filled('category_slug')) {
+            $cat = $request->input('category_slug');
+        } elseif ($request->filled('subcategory_slug')) {
+            $cat = $request->input('subcategory_slug');
+        }
+
+        if ($cat !== null && $cat !== '' && $cat !== 'toan-bo-san-pham') {
+            $matchedCategory = Category::query()
+                ->where('id', $cat)
+                ->orWhere('slug', $cat)
+                ->first();
+
+            if ($matchedCategory) {
+                $categoryIds = $this->getDescendantCategoryIds($matchedCategory);
+                $query->whereHas('categories', function ($q) use ($categoryIds) {
+                    $q->whereIn('categories.id', $categoryIds);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
 
         // Filter by Brand
@@ -126,8 +171,14 @@ class PublicController extends Controller
         }
 
         // Search by keyword
+        $q = null;
         if ($request->filled('q')) {
             $q = $request->input('q');
+        } elseif ($request->filled('search')) {
+            $q = $request->input('search');
+        }
+
+        if ($q !== null && trim((string) $q) !== '') {
             $query->where(function ($sub) use ($q) {
                 $sub->where('name', 'like', "%{$q}%")
                     ->orWhere('description', 'like', "%{$q}%")
@@ -136,24 +187,30 @@ class PublicController extends Controller
         }
 
         // Filter by Price range
-        if ($request->filled('min_price')) {
-            $query->where('price', '>=', (float) $request->input('min_price'));
-        }
-        if ($request->filled('max_price')) {
-            $query->where('price', '<=', (float) $request->input('max_price'));
+        $minPrice = $request->input('min_price') ?? $request->input('price_min');
+        if ($minPrice !== null && $minPrice !== '') {
+            $query->where('price', '>=', (float) $minPrice);
         }
 
-        // Sort results
-        $sortBy = $request->input('sort_by', 'latest');
-        if ($sortBy === 'price_asc') {
-            $query->orderBy('price', 'asc');
-        } elseif ($sortBy === 'price_desc') {
-            $query->orderBy('price', 'desc');
-        } else {
-            $query->latest();
+        $maxPrice = $request->input('max_price') ?? $request->input('price_max');
+        if ($maxPrice !== null && $maxPrice !== '') {
+            $query->where('price', '<=', (float) $maxPrice);
         }
 
-        $products = $query->paginate(12)->withQueryString();
+        // Sort results (bypass default sort if specific ids are requested to maintain manually selected order)
+        if (!$request->filled('ids')) {
+            $sortBy = $request->input('sort') ?? $request->input('sort_by') ?? 'latest';
+            if ($sortBy === 'price_asc') {
+                $query->orderBy('price', 'asc');
+            } elseif ($sortBy === 'price_desc') {
+                $query->orderBy('price', 'desc');
+            } else {
+                $query->latest();
+            }
+        }
+
+        $limit = min(200, max(1, $request->integer('limit', 12)));
+        $products = $query->paginate($limit)->withQueryString();
 
         return ApiResponse::success($products->items(), 'Lấy danh sách sản phẩm thành công.', [
             'current_page' => $products->currentPage(),
@@ -173,7 +230,7 @@ class PublicController extends Controller
             ->where(function ($q) use ($idOrSlug) {
                 $q->where('id', $idOrSlug)->orWhere('slug', $idOrSlug);
             })
-            ->with(['category', 'brand', 'variants', 'reviews' => function ($q) {
+            ->with(['category', 'categories', 'brand', 'variants', 'reviews' => function ($q) {
                 $q->where('is_visible', true)->latest();
             }])
             ->first();
@@ -183,6 +240,389 @@ class PublicController extends Controller
         }
 
         return ApiResponse::success($product);
+    }
+
+    /**
+     * Get public post categories.
+     */
+    public function postCategories()
+    {
+        $categories = PostCategory::query()
+            ->where('is_active', true)
+            ->withCount(['posts' => function ($query) {
+                $query->where('is_active', true)
+                    ->where(function ($subQuery) {
+                        $subQuery->whereNull('published_at')
+                            ->orWhere('published_at', '<=', now());
+                    });
+            }])
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (PostCategory $category) => $this->transformPostCategory($category))
+            ->values();
+
+        return ApiResponse::success($categories);
+    }
+
+    /**
+     * Get public posts list.
+     */
+    public function posts(Request $request)
+    {
+        $query = Post::query()
+            ->where('is_active', true)
+            ->where(function ($subQuery) {
+                $subQuery->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            })
+            ->with('category');
+
+        if ($request->filled('category')) {
+            $category = $request->input('category');
+            $query->whereHas('category', function ($categoryQuery) use ($category) {
+                $categoryQuery->where('id', $category)->orWhere('slug', $category);
+            });
+        }
+
+        if ($request->filled('q')) {
+            $keyword = trim((string) $request->input('q'));
+            if ($keyword !== '') {
+                $query->where(function ($searchQuery) use ($keyword) {
+                    $searchQuery
+                        ->where('title', 'like', "%{$keyword}%")
+                        ->orWhere('summary', 'like', "%{$keyword}%")
+                        ->orWhere('content', 'like', "%{$keyword}%")
+                        ->orWhere('seo_keys', 'like', "%{$keyword}%");
+                });
+            }
+        }
+
+        $sort = $request->input('sort', $request->input('sort_by', 'latest'));
+        if ($sort === 'oldest') {
+            $query->orderByRaw('COALESCE(published_at, created_at) asc');
+        } else {
+            $query->orderByRaw('COALESCE(published_at, created_at) desc');
+        }
+
+        // Static SEO generation requests the full article catalogue so no published URL is omitted.
+        $perPage = min(max((int) $request->input('limit', $request->input('per_page', 12)), 1), 200);
+        $posts = $query->paginate($perPage)->withQueryString();
+        $withContent = $request->boolean('include_content');
+
+        return ApiResponse::success(
+            $posts->getCollection()
+                ->map(fn (Post $post) => $this->transformPost($post, $withContent))
+                ->values(),
+            'Lấy danh sách bài viết thành công.',
+            [
+                'current_page' => $posts->currentPage(),
+                'last_page' => $posts->lastPage(),
+                'per_page' => $posts->perPage(),
+                'total' => $posts->total(),
+            ]
+        );
+    }
+
+    /**
+     * Get public post detail.
+     */
+    public function postDetail($idOrSlug)
+    {
+        $post = Post::query()
+            ->where('is_active', true)
+            ->where(function ($subQuery) {
+                $subQuery->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($query) use ($idOrSlug) {
+                $query->where('id', $idOrSlug)->orWhere('slug', $idOrSlug);
+            })
+            ->with('category')
+            ->first();
+
+        if (! $post) {
+            return ApiResponse::error('Bài viết không tồn tại.', 404);
+        }
+
+        return ApiResponse::success($this->transformPost($post, true));
+    }
+
+    private function transformPost(Post $post, bool $withContent = false): array
+    {
+        $summary = $this->localizedField($post, 'summary');
+        $content = $this->localizedField($post, 'content');
+        $plainContent = trim(strip_tags($summary ?: $content));
+        $articleText = trim(preg_replace('/\s+/u', ' ', strip_tags($content)) ?? '');
+        $description = $this->localizedField($post, 'seo_description') ?: Str::limit($plainContent, 155, '');
+
+        $data = [
+            'id' => $post->id,
+            'title' => $this->localizedField($post, 'title', 'Bài viết'),
+            'slug' => $post->slug,
+            'summary' => $summary ?: Str::limit($plainContent, 180, ''),
+            'image_url' => $post->image_url,
+            'seo_title' => $this->localizedField($post, 'seo_title') ?: $this->localizedField($post, 'title', 'Bài viết'),
+            'seo_description' => $description,
+            'seo_keys' => $post->seo_keys,
+            'word_count' => $articleText === '' ? 0 : count(preg_split('/\s+/u', $articleText, -1, PREG_SPLIT_NO_EMPTY) ?: []),
+            'in_language' => (app()->getLocale() ?: 'vi') === 'vi' ? 'vi-VN' : str_replace('_', '-', app()->getLocale()),
+            'published_at' => optional($post->published_at)->toIso8601String(),
+            'updated_at' => optional($post->updated_at)->toIso8601String(),
+            'category' => $post->category ? $this->transformPostCategory($post->category) : null,
+        ];
+
+        if ($withContent) {
+            $data['content'] = $content;
+        }
+
+        return $data;
+    }
+
+    private function transformPostCategory(PostCategory $category): array
+    {
+        return [
+            'id' => $category->id,
+            'name' => $this->localizedField($category, 'name', 'Bài viết'),
+            'slug' => $category->slug,
+            'description' => $this->localizedField($category, 'description'),
+            'posts_count' => (int) ($category->posts_count ?? 0),
+        ];
+    }
+
+    private function localizedField($model, string $field, string $fallback = ''): string
+    {
+        $locales = array_values(array_unique([app()->getLocale(), 'vi', 'en']));
+
+        if (method_exists($model, 'getTranslations')) {
+            $translations = $model->getTranslations($field);
+            foreach ($locales as $locale) {
+                $value = $translations[$locale] ?? null;
+                if (is_string($value) && trim($value) !== '') {
+                    return trim($value);
+                }
+            }
+        }
+
+        $value = $model->{$field} ?? null;
+        if (is_array($value)) {
+            foreach ($locales as $locale) {
+                if (! empty($value[$locale]) && is_string($value[$locale])) {
+                    return trim($value[$locale]);
+                }
+            }
+        }
+
+        return is_string($value) && trim($value) !== '' ? trim($value) : $fallback;
+    }
+
+    /**
+     * Return active vouchers that can currently apply to a subtotal.
+     */
+    public function eligibleVouchers(Request $request)
+    {
+        $subtotal = (float) $request->input('amount', $request->input('subtotal', 0));
+
+        $vouchers = Voucher::query()
+            ->where('is_active', true)
+            ->orderByDesc('id')
+            ->get()
+            ->filter(fn (Voucher $voucher) => $voucher->isValidForOrder($subtotal))
+            ->map(function (Voucher $voucher) use ($subtotal) {
+                return [
+                    'id' => $voucher->id,
+                    'code' => $voucher->code,
+                    'name' => $voucher->name,
+                    'description' => $voucher->description,
+                    'type' => $voucher->type,
+                    'value' => (float) $voucher->value,
+                    'discount_type' => $voucher->type,
+                    'discount_value' => (float) $voucher->value,
+                    'discount_amount' => $voucher->calculateDiscount($subtotal),
+                    'min_order_amount' => (float) $voucher->min_order_amount,
+                    'max_discount_amount' => (float) $voucher->max_discount_amount,
+                    'end_date' => optional($voucher->end_date)->toIso8601String(),
+                ];
+            })
+            ->values();
+
+        return ApiResponse::success($vouchers);
+    }
+
+    /**
+     * Recalculate cart totals from database prices.
+     */
+    public function recalculateCart(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'items' => 'required|array|min:1',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.variant_id' => 'nullable|exists:product_variants,id',
+            'items.*.product_variant_id' => 'nullable|exists:product_variants,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.custom_text' => 'nullable|string|max:500',
+            'items.*.custom_image_name' => 'nullable|string|max:255',
+            'items.*.custom_image_url' => 'nullable|string|max:2048',
+            'code' => 'nullable|string',
+            'voucher_code' => 'nullable|string',
+            'shipping_fee' => 'nullable|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::error('Dữ liệu không hợp lệ.', 422, $validator->errors()->toArray());
+        }
+
+        $pricing = $this->buildCartPricing(
+            $request->input('items'),
+            $request->input('voucher_code', $request->input('code')),
+            (float) $request->input('shipping_fee', 0)
+        );
+
+        if (! empty($pricing['error'])) {
+            return ApiResponse::error($pricing['error'], 422);
+        }
+
+        return ApiResponse::success([
+            'items' => $pricing['items'],
+            'subtotal' => $pricing['subtotal'],
+            'discount_amount' => $pricing['discount'],
+            'shipping_fee' => $pricing['shipping_fee'],
+            'grand_total' => $pricing['grand_total'],
+            'voucher_code' => $pricing['voucher']?->code,
+            'applied_promotions' => $pricing['voucher'] ? [[
+                'code' => $pricing['voucher']->code,
+                'promotion_type' => 'coupon',
+                'discount_amount' => $pricing['discount'],
+                'type' => $pricing['voucher']->type,
+                'value' => (float) $pricing['voucher']->value,
+            ]] : [],
+            'gifts' => [],
+            'is_free_shipping' => $pricing['shipping_fee'] <= 0,
+        ], 'Tính lại giỏ hàng thành công.');
+    }
+
+    private function buildCartPricing(array $items, ?string $voucherCode = null, float $shippingFee = 0.0): array
+    {
+        $subtotal = 0.0;
+        $orderItemsData = [];
+
+        foreach ($items as $item) {
+            $product = Product::query()
+                ->where('id', $item['product_id'])
+                ->where('is_active', true)
+                ->first();
+
+            if (!$product) {
+                return ['error' => "Sản phẩm ID {$item['product_id']} không tồn tại hoặc đã ngừng kinh doanh."];
+            }
+
+            $price = (float) $product->price;
+            $variant = null;
+            $variantName = null;
+            $sku = $product->sku;
+            $variantId = $item['variant_id'] ?? $item['product_variant_id'] ?? null;
+
+            if (!empty($variantId)) {
+                $variant = ProductVariant::query()
+                    ->where('id', $variantId)
+                    ->where('product_id', $product->id)
+                    ->first();
+
+                if (!$variant || !$variant->is_active) {
+                    return ['error' => "Biến thể sản phẩm không hợp lệ cho {$product->name}."];
+                }
+
+                if ($variant->price !== null) {
+                    $price = (float) $variant->price;
+                }
+
+                $variantName = $variant->name;
+                $sku = $variant->sku ?: $product->sku;
+            }
+
+            $qty = (int) $item['quantity'];
+
+            if ($product->manage_stock && $product->stock_quantity < $qty) {
+                return ['error' => "Sản phẩm {$product->name} đã hết hàng hoặc không đủ tồn kho."];
+            }
+
+            if ($variant && $variant->stock_quantity !== null && $variant->stock_quantity < $qty) {
+                return ['error' => "Biến thể {$variant->name} không đủ tồn kho."];
+            }
+
+            $total = $price * $qty;
+            $subtotal += $total;
+            $customText = trim((string) ($item['custom_text'] ?? $item['customText'] ?? ''));
+            $customImageName = trim((string) ($item['custom_image_name'] ?? $item['customImageName'] ?? ''));
+            $customImageUrl = $this->sanitizeCustomizationImageUrl(
+                $item['custom_image_url'] ?? $item['customImageUrl'] ?? ''
+            );
+
+            $orderItemsData[] = [
+                'product_id' => $product->id,
+                'product_variant_id' => $variant?->id,
+                'product_name' => $product->name,
+                'variant_name' => $variantName,
+                'sku' => $sku,
+                'price' => $price,
+                'quantity' => $qty,
+                'total' => $total,
+                'custom_text' => $customText !== '' ? Str::limit($customText, 500, '') : null,
+                'custom_image_name' => $customImageName !== '' ? Str::limit($customImageName, 255, '') : null,
+                'custom_image_url' => $customImageUrl,
+            ];
+        }
+
+        $discount = 0.0;
+        $voucher = null;
+        if ($voucherCode) {
+            $voucher = Voucher::query()->where('code', strtoupper($voucherCode))->first();
+            if (!$voucher || !$voucher->isValidForOrder($subtotal)) {
+                return ['error' => 'Mã giảm giá không hợp lệ cho đơn hàng này.'];
+            }
+            $discount = $voucher->calculateDiscount($subtotal);
+        }
+
+        return [
+            'items' => $orderItemsData,
+            'subtotal' => $subtotal,
+            'discount' => $discount,
+            'shipping_fee' => max(0.0, $shippingFee),
+            'grand_total' => max(0.0, $subtotal - $discount) + max(0.0, $shippingFee),
+            'voucher' => $voucher,
+        ];
+    }
+
+    private function sanitizeCustomizationImageUrl(mixed $url): ?string
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return null;
+        }
+
+        if (Str::startsWith($url, ['https://', 'http://', '/storage/', 'storage/'])) {
+            return Str::limit($url, 2048, '');
+        }
+
+        return null;
+    }
+
+    private function normalizeUploadedPublicUrl(Request $request, string $url): string
+    {
+        $backendBase = rtrim($request->getSchemeAndHttpHost() . $request->getBaseUrl(), '/');
+        if (Str::startsWith($url, ['/storage/', 'storage/'])) {
+            return $backendBase . '/' . ltrim($url, '/');
+        }
+
+        $parts = parse_url($url);
+        $host = $parts['host'] ?? '';
+        $path = $parts['path'] ?? '';
+        if ($host === $request->getHost() && Str::startsWith($path, '/storage/')) {
+            $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+            return $backendBase . $path . $query;
+        }
+
+        return $url;
     }
 
     /**
@@ -238,11 +678,55 @@ class PublicController extends Controller
         ], 'Áp dụng mã giảm giá thành công.');
     }
 
+    public function uploadCustomizationImage(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|image|max:5120',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::error('Ảnh không hợp lệ. Vui lòng chọn ảnh tối đa 5MB.', 422, $validator->errors()->toArray());
+        }
+
+        try {
+            $file = $request->file('file');
+            $url = app(CloudinaryService::class)->uploadFile($file, 'order-customizations');
+            $url = $this->normalizeUploadedPublicUrl($request, $url);
+
+            return ApiResponse::success([
+                'url' => $url,
+                'name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+                'mime_type' => $file->getMimeType(),
+            ], 'Tải ảnh cá nhân hóa thành công.');
+        } catch (\Throwable $e) {
+            Log::error('Customization image upload failed: ' . $e->getMessage());
+            return ApiResponse::error('Không thể tải ảnh lên. Vui lòng thử lại.', 500);
+        }
+    }
+
     /**
      * Create checkout order.
      */
     public function checkout(Request $request)
     {
+        $input = $request->all();
+        $paymentAliases = [
+            'bank' => 'bank_transfer',
+            'momo' => 'online',
+            'zalopay' => 'online',
+        ];
+        if (isset($input['payment_method'])) {
+            $input['payment_method'] = $paymentAliases[$input['payment_method']] ?? $input['payment_method'];
+        }
+        if (isset($input['note']) && !isset($input['notes'])) {
+            $input['notes'] = $input['note'];
+        }
+        if (empty($input['voucher_code']) && !empty($input['applied_vouchers'][0])) {
+            $input['voucher_code'] = $input['applied_vouchers'][0];
+        }
+        $request->merge($input);
+
         $validator = Validator::make($request->all(), [
             'customer_name' => 'required|string|max:255',
             'customer_email' => 'required|email|max:255',
@@ -253,7 +737,11 @@ class PublicController extends Controller
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.variant_id' => 'nullable|exists:product_variants,id',
+            'items.*.product_variant_id' => 'nullable|exists:product_variants,id',
             'items.*.quantity' => 'required|integer|min:1',
+            'items.*.custom_text' => 'nullable|string|max:500',
+            'items.*.custom_image_name' => 'nullable|string|max:255',
+            'items.*.custom_image_url' => 'nullable|string|max:2048',
             'voucher_code' => 'nullable|string',
             'shipping_fee' => 'nullable|numeric|min:0',
         ]);
@@ -269,66 +757,22 @@ class PublicController extends Controller
             }
         }
 
-        $subtotal = 0.0;
-        $orderItemsData = [];
+        $pricing = $this->buildCartPricing(
+            $request->input('items'),
+            $request->input('voucher_code'),
+            (float) $request->input('shipping_fee', 0)
+        );
 
-        foreach ($request->input('items') as $item) {
-            $product = Product::query()->where('id', $item['product_id'])->where('is_active', true)->first();
-            if (!$product) {
-                return ApiResponse::error("Sản phẩm ID {$item['product_id']} không tồn tại hoặc đã ngừng kinh doanh.", 422);
-            }
-
-            $price = (float) $product->price;
-            $variantName = null;
-            $sku = $product->sku;
-
-            if (!empty($item['variant_id'])) {
-                $variant = ProductVariant::query()->where('id', $item['variant_id'])->where('product_id', $product->id)->first();
-                if (!$variant) {
-                    return ApiResponse::error("Biến thể sản phẩm không hợp lệ cho {$product->name}.", 422);
-                }
-                if ($variant->price !== null) {
-                    $price = (float) $variant->price;
-                }
-                $variantName = $variant->name;
-                $sku = $variant->sku ?: $product->sku;
-            }
-
-            $qty = (int) $item['quantity'];
-
-            if ($product->manage_stock && $product->stock_quantity < $qty) {
-                return ApiResponse::error("Sản phẩm {$product->name} đã hết hàng hoặc không đủ tồn kho.", 422);
-            }
-
-            $total = $price * $qty;
-            $subtotal += $total;
-
-            $orderItemsData[] = [
-                'product_id' => $product->id,
-                'product_name' => $product->name,
-                'variant_name' => $variantName,
-                'sku' => $sku,
-                'price' => $price,
-                'quantity' => $qty,
-                'total' => $total,
-            ];
+        if (! empty($pricing['error'])) {
+            return ApiResponse::error($pricing['error'], 422);
         }
 
-        // Apply voucher if present
-        $discount = 0.0;
-        $voucher = null;
-        if ($request->filled('voucher_code')) {
-            $voucherCode = strtoupper($request->input('voucher_code'));
-            $voucher = Voucher::query()->where('code', $voucherCode)->first();
-            if ($voucher && $voucher->isValidForOrder($subtotal)) {
-                $discount = $voucher->calculateDiscount($subtotal);
-            } else {
-                return ApiResponse::error("Mã giảm giá không hợp lệ cho đơn hàng này.", 422);
-            }
-        }
-
-        $shippingFee = (float) $request->input('shipping_fee', 0.0);
-        $grandTotal = max(0.0, $subtotal - $discount) + $shippingFee;
+        $subtotal = $pricing['subtotal'];
+        $discount = $pricing['discount'];
+        $shippingFee = $pricing['shipping_fee'];
+        $grandTotal = $pricing['grand_total'];
+        $voucher = $pricing['voucher'];
+        $orderItemsData = $pricing['items'];
 
         // Try using Sanctum guard for checking logged-in user id
         $customerId = $request->user('sanctum')?->id;
@@ -359,6 +803,12 @@ class PublicController extends Controller
                 $product = Product::find($itemData['product_id']);
                 if ($product && $product->manage_stock) {
                     $product->decrement('stock_quantity', $itemData['quantity']);
+                }
+
+                if (!empty($itemData['product_variant_id'])) {
+                    ProductVariant::query()
+                        ->where('id', $itemData['product_variant_id'])
+                        ->decrement('stock_quantity', $itemData['quantity']);
                 }
             }
 
@@ -397,14 +847,9 @@ class PublicController extends Controller
             }
         }
 
-        // Email dispatch
-        try {
-            $order->load('items');
-            Mail::to($order->customer_email)->send(new OrderStatusMail($order));
-            \App\Support\NotificationHelper::sendNewOrderNotification($order);
-        } catch (\Exception $e) {
-            Log::error("Failed to send order checkout mail: " . $e->getMessage());
-        }
+        // Notification providers are isolated and never roll back a successful checkout.
+        $order->load('items');
+        \App\Support\NotificationHelper::sendNewOrderNotification($order);
 
         $responseData = $order->toArray();
         if ($paymentUrl) {
@@ -775,5 +1220,23 @@ class PublicController extends Controller
         $finalRedirectUrl = $scheme . $host . $port . $path . '?' . $newQuery;
 
         return redirect($finalRedirectUrl);
+    }
+
+    /**
+     * Get descendant category IDs recursively.
+     */
+    private function getDescendantCategoryIds(Category $category): array
+    {
+        $ids = [$category->id];
+
+        $children = Category::query()
+            ->where('parent_id', $category->id)
+            ->get();
+
+        foreach ($children as $child) {
+            $ids = array_merge($ids, $this->getDescendantCategoryIds($child));
+        }
+
+        return array_unique($ids);
     }
 }

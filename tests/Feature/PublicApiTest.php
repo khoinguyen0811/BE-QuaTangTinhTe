@@ -266,4 +266,35 @@ class PublicApiTest extends TestCase
         $responseEmail = $this->getJson('/api/public/orders/track?order_number=ORD-TRACK-001&contact=track@user.com');
         $responseEmail->assertStatus(200);
     }
+
+    public function test_products_api_can_optionally_include_inactive_products(): void
+    {
+        Product::query()->create([
+            'category_id' => $this->category->id,
+            'brand_id' => $this->brand->id,
+            'name' => ['vi' => 'Inactive Product', 'en' => 'Inactive Product'],
+            'slug' => 'inactive-product',
+            'sku' => 'INACTIVEPROD',
+            'price' => 15000000.00,
+            'stock_quantity' => 5,
+            'manage_stock' => true,
+            'is_active' => false,
+        ]);
+
+        $response1 = $this->getJson('/api/products');
+        $response1->assertOk();
+        $titles1 = array_map(function ($item) {
+            $n = $item['name'] ?? null;
+            return is_array($n) ? ($n['vi'] ?? $n['en'] ?? '') : $n;
+        }, $response1->json('data'));
+        $this->assertNotContains('Inactive Product', $titles1);
+
+        $response2 = $this->getJson('/api/products?include_inactive=1');
+        $response2->assertOk();
+        $titles2 = array_map(function ($item) {
+            $n = $item['name'] ?? null;
+            return is_array($n) ? ($n['vi'] ?? $n['en'] ?? '') : $n;
+        }, $response2->json('data'));
+        $this->assertContains('Inactive Product', $titles2);
+    }
 }

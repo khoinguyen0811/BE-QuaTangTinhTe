@@ -48,6 +48,7 @@ class AppServiceProvider extends ServiceProvider
                 'email' => $notifiable->getEmailForPasswordReset(),
             ]);
         });
+        \Illuminate\Support\Facades\Gate::policy(\App\Models\CustomPage::class, \App\Policies\CustomPagePolicy::class);
 
         // Dynamic Role-based Permission Gate
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
@@ -69,6 +70,29 @@ class AppServiceProvider extends ServiceProvider
         // Dynamic View Composer for Real Notifications in Admin Header
         view()->composer('admin.layouts.header', function ($view) {
             $notifications = collect();
+            $dashboardSettings = [
+                'enabled' => true,
+                'play_sound' => true,
+                'auto_refresh' => true,
+            ];
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('project_settings')) {
+                $dashboardSettings = (array) data_get(
+                    app(\App\Services\NotificationSettingsService::class)->get(false),
+                    'dashboard',
+                    $dashboardSettings
+                );
+            }
+
+            if (! data_get($dashboardSettings, 'enabled', true)) {
+                $view->with([
+                    'headerNotifications' => $notifications,
+                    'dashboardNotificationSettings' => $dashboardSettings,
+                    'latestNotificationOrderId' => 0,
+                ]);
+
+                return;
+            }
 
             // Fetch recent orders
             if (\Illuminate\Support\Facades\Schema::hasTable('orders')) {
@@ -81,6 +105,7 @@ class AppServiceProvider extends ServiceProvider
                         'icon' => 'solar:cart-3-line-duotone',
                         'bg_color' => 'bg-primary-subtle text-primary',
                         'link' => route('admin.orders.show', $order->id),
+                        'timestamp' => $order->created_at?->getTimestamp() ?? 0,
                     ]);
                 }
             }
@@ -101,6 +126,7 @@ class AppServiceProvider extends ServiceProvider
                         'icon' => 'solar:chat-round-line-line-duotone',
                         'bg_color' => 'bg-info-subtle text-info',
                         'link' => route('admin.reviews.index'),
+                        'timestamp' => $review->created_at?->getTimestamp() ?? 0,
                     ]);
                 }
             }
@@ -116,17 +142,22 @@ class AppServiceProvider extends ServiceProvider
                         'icon' => 'solar:shield-user-line-duotone',
                         'bg_color' => 'bg-success-subtle text-success',
                         'link' => route('admin.users.edit', $user->id),
+                        'timestamp' => $user->created_at?->getTimestamp() ?? 0,
                     ]);
                 }
             }
 
             // Sort notifications by actual database timestamp if available
             // (We mix them, then take the 5 most recent across all events)
-            $notifications = $notifications->sortByDesc(function ($n) {
-                return $n['time']; // simple string sort is okay, but we can do it more reliably if needed. Since we just want the top 5, sorting is fine.
-            })->take(5);
+            $notifications = $notifications->sortByDesc('timestamp')->take(5);
 
-            $view->with('headerNotifications', $notifications);
+            $view->with([
+                'headerNotifications' => $notifications,
+                'dashboardNotificationSettings' => $dashboardSettings,
+                'latestNotificationOrderId' => \Illuminate\Support\Facades\Schema::hasTable('orders')
+                    ? (int) \App\Models\Order::query()->max('id')
+                    : 0,
+            ]);
         });
     }
 }

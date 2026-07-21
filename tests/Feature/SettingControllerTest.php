@@ -89,10 +89,21 @@ class SettingControllerTest extends TestCase
             'seo' => [
                 'title' => 'Updated SEO Title',
                 'description' => 'Updated SEO Description',
+                'strict_post_gate' => '0',
             ],
             'social_links' => [
                 'facebook' => 'https://facebook.com/updatedpage',
             ],
+            'navigation_menu' => json_encode([
+                [
+                    'label' => 'Bài viết & tư vấn',
+                    'href' => '/posts',
+                    'visible' => true,
+                    'dropdown_mode' => 'single',
+                    'children' => [],
+                    'columns' => [],
+                ],
+            ]),
             'logo' => UploadedFile::fake()->image('logo.png'),
             'favicon' => UploadedFile::fake()->image('favicon.png'),
         ]);
@@ -110,6 +121,14 @@ class SettingControllerTest extends TestCase
         $theme = ProjectSetting::where('setting_key', 'theme')->first()->setting_value;
         $this->assertEquals('#ff0000', $theme['primary_color']);
         $this->assertEquals('compact', $theme['layout']);
+
+        $seo = ProjectSetting::where('setting_key', 'seo')->first()->setting_value;
+        $this->assertFalse($seo['strict_post_gate']);
+
+        $navigationMenu = ProjectSetting::where('setting_key', 'navigation_menu')->first()->setting_value;
+        $this->assertEquals('Bài viết & tư vấn', $navigationMenu[0]['label']);
+        $this->assertEquals('/posts', $navigationMenu[0]['href']);
+        $this->assertTrue($navigationMenu[0]['visible']);
 
         $logoUrl = ProjectSetting::where('setting_key', 'logo_url')->first()->setting_value;
         $this->assertNotNull($logoUrl);

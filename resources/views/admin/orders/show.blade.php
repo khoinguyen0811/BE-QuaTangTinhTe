@@ -217,6 +217,29 @@
                                     @if($item->variant_name)
                                         <span class="badge bg-secondary-subtle text-secondary fw-semibold fs-1">{{ $item->variant_name }}</span>
                                     @endif
+                                    @if($item->custom_text || $item->custom_image_name || $item->custom_image_url)
+                                        <div class="mt-2 p-2 rounded border bg-light-subtle">
+                                            <div class="fw-semibold text-primary fs-2 mb-1 d-flex align-items-center gap-1">
+                                                <i class="ti ti-wand"></i>
+                                                Thiết kế cá nhân hóa
+                                            </div>
+                                            @if($item->custom_text)
+                                                <div class="fs-2 text-muted mb-1">
+                                                    <strong>Nội dung khắc:</strong> {{ $item->custom_text }}
+                                                </div>
+                                            @endif
+                                            @if($item->custom_image_url)
+                                                <a href="{{ $item->custom_image_url }}" target="_blank" rel="noopener" class="d-inline-flex align-items-center gap-2 text-decoration-none">
+                                                    <img src="{{ $item->custom_image_url }}" alt="{{ $item->custom_image_name ?: 'Ảnh cá nhân hóa' }}" class="rounded border object-fit-cover" width="54" height="54" onerror="this.classList.add('d-none')">
+                                                    <span class="fs-2 fw-semibold text-primary">{{ $item->custom_image_name ?: 'Xem ảnh khách gửi' }}</span>
+                                                </a>
+                                            @elseif($item->custom_image_name)
+                                                <div class="fs-2 text-muted">
+                                                    <strong>Ảnh khách gửi:</strong> {{ $item->custom_image_name }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>
                                     <span class="text-muted fs-3">{{ $item->sku ?: '-' }}</span>

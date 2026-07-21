@@ -1,8 +1,9 @@
-@extends('admin.layouts.app')
+@extends(request()->has('choose') ? 'admin.layouts.blank_media' : 'admin.layouts.app')
 
 @section('title', __('catalog.media.title'))
 
 @section('content')
+    @if(!request()->has('choose'))
     <!-- Header Card -->
     <div class="card bg-primary-subtle shadow-none position-relative overflow-hidden mb-4">
         <div class="card-body px-4 py-3 d-flex flex-column gap-3">
@@ -20,6 +21,7 @@
             </div>
         </div>
     </div>
+    @endif
 
     <!-- Configuration Warning -->
     @if(!$isConfigured)
@@ -83,7 +85,7 @@
                         <div class="row align-items-center g-2">
                             <div class="col-sm-9">
                                 <div class="input-group">
-                                    <input type="file" class="form-control" name="file" id="media_file_upload" required>
+                                    <input type="file" class="form-control" name="files[]" id="media_file_upload" multiple required>
                                     <label class="input-group-text" for="media_file_upload">{{ __('catalog.media.select_file') }}</label>
                                 </div>
                             </div>
@@ -93,6 +95,9 @@
                                 </button>
                             </div>
                         </div>
+                        @error('files')
+                            <div class="text-danger small mt-1">{{ $message }}</div>
+                        @enderror
                         @error('file')
                             <div class="text-danger small mt-1">{{ $message }}</div>
                         @enderror
@@ -150,12 +155,23 @@
                                             </div>
 
                                             <div class="d-flex gap-2">
-                                                <!-- Copy Link Button -->
-                                                <button class="btn btn-sm btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-1 copy-url-btn" 
-                                                        data-url="{{ $resource['secure_url'] }}">
-                                                    <i class="ti ti-copy fs-4"></i>
-                                                    <span>{{ __('catalog.media.copy_url') }}</span>
-                                                </button>
+                                                @if(request()->has('choose'))
+                                                     <!-- Choose Button for GrapesJS -->
+                                                     <button class="btn btn-sm btn-primary flex-fill d-flex align-items-center justify-content-center gap-1 select-asset-btn" 
+                                                             data-url="{{ $resource['secure_url'] }}"
+                                                             data-id="{{ $resource['public_id'] }}"
+                                                             data-alt="{{ $resource['alt'] ?? '' }}">
+                                                         <i class="ti ti-check fs-4"></i>
+                                                         <span>Chọn</span>
+                                                     </button>
+                                                @else
+                                                     <!-- Copy Link Button -->
+                                                     <button class="btn btn-sm btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-1 copy-url-btn" 
+                                                             data-url="{{ $resource['secure_url'] }}">
+                                                         <i class="ti ti-copy fs-4"></i>
+                                                         <span>{{ __('catalog.media.copy_url') }}</span>
+                                                     </button>
+                                                @endif
 
                                                 <!-- Delete Button -->
                                                 <form method="POST" action="{{ route('admin.media.delete') }}" class="d-inline flex-fill">
@@ -205,6 +221,22 @@
                     }).catch(err => {
                         alert('{{ __('catalog.media.copy_failed') }}');
                     });
+                });
+            });
+
+            // Select asset feature for GrapesJS iframe
+            const selectButtons = document.querySelectorAll('.select-asset-btn');
+            selectButtons.forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const url = this.getAttribute('data-url');
+                    const id = this.getAttribute('data-id');
+                    const alt = this.getAttribute('data-alt') || '';
+                    window.parent.postMessage({
+                        type: 'select-asset',
+                        url: url,
+                        media_id: id,
+                        alt: alt
+                    }, window.location.origin);
                 });
             });
         });

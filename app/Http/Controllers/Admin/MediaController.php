@@ -35,19 +35,36 @@ class MediaController extends Controller
     public function upload(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|max:10240', // 10MB limit
+            'files' => 'nullable|array',
+            'files.*' => 'required|file|max:10240', // 10MB limit per file
+            'file' => 'nullable|file|max:10240',
             'folder' => 'nullable|string',
         ]);
 
         $folder = $request->input('folder', 'general');
+        $uploadedUrls = [];
         
         try {
-            $url = $this->cloudinaryService->uploadFile($request->file('file'), $folder);
+            $files = [];
+            if ($request->hasFile('files')) {
+                $files = $request->file('files');
+            } elseif ($request->hasFile('file')) {
+                $files = [$request->file('file')];
+            }
+
+            if (empty($files)) {
+                throw new \Exception("Không có file được chọn để tải lên.");
+            }
+
+            foreach ($files as $file) {
+                $uploadedUrls[] = $this->cloudinaryService->uploadFile($file, $folder);
+            }
             
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'url' => $url,
+                    'urls' => $uploadedUrls,
+                    'url' => $uploadedUrls[0] ?? null,
                     'message' => __('catalog.media.upload_success')
                 ]);
             }

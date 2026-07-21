@@ -34,6 +34,7 @@
     <form method="POST" action="{{ route('admin.products.update', $product) }}" class="admin-form-with-sticky-actions" enctype="multipart/form-data">
         @csrf
         @method('PUT')
+        <input type="hidden" name="updated_at" value="{{ $product->updated_at?->toIso8601String() }}">
         @include('admin.catalog.products._form')
     </form>
 @endsection

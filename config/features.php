@@ -17,4 +17,5 @@ return [
         'max_products',
         'max_admin_users',
     ],
+    'visual_page_builder_enabled' => env('VISUAL_PAGE_BUILDER_ENABLED', true),
 ];

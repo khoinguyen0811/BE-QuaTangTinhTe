@@ -69,7 +69,7 @@ class CloudinaryService
      */
     public function listFolders(): array
     {
-        return ['products', 'brands', 'categories', 'general'];
+        return ['products', 'brands', 'categories', 'home-builder', 'general'];
     }
 
     /**
@@ -97,6 +97,7 @@ class CloudinaryService
                     'bytes' => $resource['bytes'],
                     'created_at' => $resource['created_at'],
                     'format' => $resource['format'] ?? 'file',
+                    'storage' => 'cloudinary',
                 ];
             }
 
@@ -156,6 +157,7 @@ class CloudinaryService
                 'bytes' => Storage::disk('public')->size($file),
                 'created_at' => date('Y-m-d\TH:i:s\Z', Storage::disk('public')->lastModified($file)),
                 'format' => pathinfo($file, PATHINFO_EXTENSION),
+                'storage' => 'local',
             ];
         }
 

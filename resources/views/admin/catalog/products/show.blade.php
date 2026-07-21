@@ -23,7 +23,13 @@
                     <h5 class="mb-3">{{ __('catalog.products.details') }}</h5>
                     <div class="mb-3">
                         <div class="text-muted">{{ __('catalog.fields.category') }}</div>
-                        <div class="fw-semibold">{{ $product->category?->name ?? __('catalog.common.none') }}</div>
+                        <div class="fw-semibold">
+                            @forelse($product->categories as $index => $cat)
+                                {{ $cat->name }}{{ $index < count($product->categories) - 1 ? ', ' : '' }}
+                            @empty
+                                {{ __('catalog.common.none') }}
+                            @endforelse
+                        </div>
                     </div>
                     <div class="mb-3">
                         <div class="text-muted">{{ __('catalog.fields.brand') }}</div>

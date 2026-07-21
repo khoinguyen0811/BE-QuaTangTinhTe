@@ -22,12 +22,23 @@ class Category extends Model
         'image_url',
         'sort_order',
         'is_active',
+        'is_system',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_system' => 'boolean',
         'sort_order' => 'integer',
     ];
+
+    protected static function booted()
+    {
+        static::deleting(function ($category) {
+            if ($category->is_system) {
+                throw new \RuntimeException('Không thể xóa danh mục hệ thống.');
+            }
+        });
+    }
 
     public function parent()
     {
@@ -41,6 +52,6 @@ class Category extends Model
 
     public function products()
     {
-        return $this->hasMany(Product::class);
+        return $this->belongsToMany(Product::class, 'category_product');
     }
 }

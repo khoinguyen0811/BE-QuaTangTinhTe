@@ -39,10 +39,12 @@ class SettingController extends Controller
             'theme.layout' => 'nullable|string|in:default,compact,boxed',
             'seo.title' => 'nullable|string|max:255',
             'seo.description' => 'nullable|string|max:500',
+            'seo.strict_post_gate' => 'nullable|boolean',
             'social_links.facebook' => 'nullable|url|max:255',
             'social_links.youtube' => 'nullable|url|max:255',
             'social_links.instagram' => 'nullable|url|max:255',
             'social_links.tiktok' => 'nullable|url|max:255',
+            'navigation_menu' => 'nullable|string',
         ]);
 
         // Update basic and nested JSON columns
@@ -61,14 +63,33 @@ class SettingController extends Controller
             ['setting_value' => $validated['theme'] ?? []]
         );
 
+        $existingSeo = ProjectSetting::query()
+            ->where('setting_key', 'seo')
+            ->value('setting_value');
+        if (is_string($existingSeo)) {
+            $existingSeo = json_decode($existingSeo, true);
+        }
+        $seoSettings = array_merge(
+            is_array($existingSeo) ? $existingSeo : [],
+            $validated['seo'] ?? []
+        );
+        $seoSettings['strict_post_gate'] = $request->has('seo.strict_post_gate')
+            ? $request->boolean('seo.strict_post_gate')
+            : (bool) ($seoSettings['strict_post_gate'] ?? true);
+
         ProjectSetting::updateOrCreate(
             ['setting_key' => 'seo'],
-            ['setting_value' => $validated['seo'] ?? []]
+            ['setting_value' => $seoSettings]
         );
 
         ProjectSetting::updateOrCreate(
             ['setting_key' => 'social_links'],
             ['setting_value' => $validated['social_links'] ?? []]
+        );
+
+        ProjectSetting::updateOrCreate(
+            ['setting_key' => 'navigation_menu'],
+            ['setting_value' => $this->normalizeNavigationMenu($request->input('navigation_menu'))]
         );
 
         // Upload logo if uploaded
@@ -99,5 +120,67 @@ class SettingController extends Controller
         return redirect()
             ->route('admin.settings.index')
             ->with('success', 'Đã cập nhật cấu hình website thành công.');
+    }
+
+    private function normalizeNavigationMenu(?string $rawMenu): array
+    {
+        $decoded = json_decode($rawMenu ?: '[]', true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        return collect($decoded)
+            ->filter(fn ($item) => is_array($item))
+            ->map(function (array $item) {
+                $mode = ($item['dropdown_mode'] ?? 'single') === 'multi' ? 'multi' : 'single';
+
+                return [
+                    'label' => trim((string) ($item['label'] ?? '')),
+                    'href' => trim((string) ($item['href'] ?? '#')) ?: '#',
+                    'badge' => trim((string) ($item['badge'] ?? '')),
+                    'visible' => (bool) ($item['visible'] ?? true),
+                    'dropdown_mode' => $mode,
+                    'children' => $this->normalizeMenuLinks($item['children'] ?? []),
+                    'columns' => $this->normalizeMenuColumns($item['columns'] ?? []),
+                ];
+            })
+            ->filter(fn ($item) => $item['label'] !== '')
+            ->values()
+            ->all();
+    }
+
+    private function normalizeMenuColumns(mixed $columns): array
+    {
+        if (! is_array($columns)) {
+            return [];
+        }
+
+        return collect($columns)
+            ->filter(fn ($column) => is_array($column))
+            ->map(fn (array $column) => [
+                'title' => trim((string) ($column['title'] ?? '')),
+                'items' => $this->normalizeMenuLinks($column['items'] ?? []),
+            ])
+            ->filter(fn ($column) => $column['title'] !== '' || count($column['items']) > 0)
+            ->values()
+            ->all();
+    }
+
+    private function normalizeMenuLinks(mixed $links): array
+    {
+        if (! is_array($links)) {
+            return [];
+        }
+
+        return collect($links)
+            ->filter(fn ($link) => is_array($link))
+            ->map(fn (array $link) => [
+                'label' => trim((string) ($link['label'] ?? '')),
+                'href' => trim((string) ($link['href'] ?? '#')) ?: '#',
+                'visible' => (bool) ($link['visible'] ?? true),
+            ])
+            ->filter(fn ($link) => $link['label'] !== '')
+            ->values()
+            ->all();
     }
 }

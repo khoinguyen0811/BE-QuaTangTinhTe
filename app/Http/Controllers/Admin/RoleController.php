@@ -23,6 +23,8 @@ class RoleController extends Controller
             'manage_users' => 'Quản lý tài khoản',
             'manage_roles' => 'Quản lý vai trò & phân quyền',
             'manage_settings' => 'Cấu hình website',
+            'manage_custom_pages' => 'Quản lý trang tĩnh (Xem, Thêm, Sửa, Xóa)',
+            'publish_custom_pages' => 'Xuất bản trang tĩnh (Publish/Unpublish)',
         ];
     }
 

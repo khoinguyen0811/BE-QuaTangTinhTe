@@ -100,6 +100,13 @@ class FoundationSeeder extends Seeder
                 'description' => null,
             ],
             'social_links' => [],
+            'navigation_menu' => [
+                ['label' => 'Trang chủ', 'href' => '/', 'badge' => '', 'visible' => true, 'dropdown_mode' => 'single', 'children' => [], 'columns' => []],
+                ['label' => 'Giới thiệu', 'href' => '/about', 'badge' => '', 'visible' => true, 'dropdown_mode' => 'single', 'children' => [], 'columns' => []],
+                ['label' => 'Bộ sưu tập', 'href' => '/collection', 'badge' => '', 'visible' => true, 'dropdown_mode' => 'single', 'children' => [], 'columns' => []],
+                ['label' => 'Bài viết', 'href' => '/posts', 'badge' => '', 'visible' => true, 'dropdown_mode' => 'single', 'children' => [], 'columns' => []],
+                ['label' => 'Liên hệ', 'href' => '/contact', 'badge' => '', 'visible' => true, 'dropdown_mode' => 'single', 'children' => [], 'columns' => []],
+            ],
         ];
 
         foreach ($settings as $key => $value) {

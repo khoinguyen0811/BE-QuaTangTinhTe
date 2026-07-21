@@ -73,8 +73,7 @@ class OrderController extends Controller
 
         if ($oldStatus !== $order->status) {
             $order->load('items');
-            \Illuminate\Support\Facades\Mail::to($order->customer_email)
-                ->send(new \App\Mail\OrderStatusMail($order));
+            app(\App\Services\NotificationService::class)->sendCustomerOrderStatus($order);
         }
 
         return redirect()

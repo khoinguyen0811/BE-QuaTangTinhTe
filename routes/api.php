@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AdminHomeLayoutController;
 use App\Http\Controllers\Api\PublicController;
+use App\Http\Controllers\Api\HomeLayoutController;
 use App\Http\Controllers\Api\PublicAuthController;
 use App\Http\Controllers\Api\UserAddressController;
 use App\Http\Controllers\Api\SystemController;
@@ -16,18 +18,26 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Plesk remote deployment database migration trigger
-Route::get('/system/migrate', [SystemController::class, 'migrate']);
+Route::match(['get', 'post'], '/system/migrate', [SystemController::class, 'migrate']);
 
 // Compatibility endpoints mapped to match the static frontend client requests
 Route::get('/settings', [PublicController::class, 'settings']);
+Route::get('/pages/home', [HomeLayoutController::class, 'show']);
 Route::get('/categories', [PublicController::class, 'categories']);
 Route::get('/brands', [PublicController::class, 'brands']);
 Route::get('/products', [PublicController::class, 'products']);
 Route::get('/products/{id_or_slug}', [PublicController::class, 'productDetail']);
 Route::get('/products/id/{id_or_slug}', [PublicController::class, 'productDetail']);
+Route::get('/post-categories', [PublicController::class, 'postCategories']);
+Route::get('/posts', [PublicController::class, 'posts']);
+Route::get('/posts/{id_or_slug}', [PublicController::class, 'postDetail']);
+Route::post('/uploads/customization', [PublicController::class, 'uploadCustomizationImage']);
 
 // Checkout (Public)
 Route::post('/orders', [PublicController::class, 'checkout']);
+Route::get('/vouchers/eligible', [PublicController::class, 'eligibleVouchers']);
+Route::post('/vouchers/apply', [PublicController::class, 'applyVoucher']);
+Route::post('/cart/recalculate', [PublicController::class, 'recalculateCart']);
 
 // Customer Auth APIs
 Route::post('/auth/login', [PublicAuthController::class, 'login']);
@@ -60,21 +70,28 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::prefix('public')->group(function () {
     Route::get('/health', [PublicController::class, 'health']);
     Route::get('/settings', [PublicController::class, 'settings']);
+    Route::get('/pages/home', [HomeLayoutController::class, 'show']);
 
     // Catalog routes
     Route::get('/categories', [PublicController::class, 'categories']);
     Route::get('/brands', [PublicController::class, 'brands']);
     Route::get('/products', [PublicController::class, 'products']);
     Route::get('/products/{id_or_slug}', [PublicController::class, 'productDetail']);
+    Route::get('/post-categories', [PublicController::class, 'postCategories']);
+    Route::get('/posts', [PublicController::class, 'posts']);
+    Route::get('/posts/{id_or_slug}', [PublicController::class, 'postDetail']);
 
     Route::middleware('feature:review')->group(function () {
         Route::post('/products/{id_or_slug}/reviews', [PublicController::class, 'storeReview']);
     });
 
     // Vouchers
+    Route::get('/vouchers/eligible', [PublicController::class, 'eligibleVouchers']);
     Route::post('/vouchers/apply', [PublicController::class, 'applyVoucher']);
 
     // Checkout & Tracking
+    Route::post('/cart/recalculate', [PublicController::class, 'recalculateCart']);
+    Route::post('/uploads/customization', [PublicController::class, 'uploadCustomizationImage']);
     Route::post('/orders/checkout', [PublicController::class, 'checkout']);
     Route::get('/orders/track', [PublicController::class, 'trackOrder']);
     Route::get('/payment/vnpay/ipn', [PublicController::class, 'vnpayIpn'])->name('api.payment.vnpay.ipn');
@@ -117,6 +134,17 @@ Route::prefix('admin')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/logout', [AuthController::class, 'logout']);
+        Route::get('/pages/home/draft', [AdminHomeLayoutController::class, 'showDraft']);
+        Route::put('/pages/home/draft', [AdminHomeLayoutController::class, 'updateDraft']);
+        Route::post('/pages/home/publish', [AdminHomeLayoutController::class, 'publish']);
+        Route::get('/pages/home/versions', [AdminHomeLayoutController::class, 'versions']);
+        Route::post('/pages/home/rollback/{revision}', [AdminHomeLayoutController::class, 'rollback']);
+        Route::get('/pages/home/media', [AdminHomeLayoutController::class, 'mediaLibrary']);
+        Route::post('/pages/home/media', [AdminHomeLayoutController::class, 'upload']);
+        
+        // System settings management
+        Route::get('/settings', [\App\Http\Controllers\Api\AdminSettingController::class, 'index']);
+        Route::put('/settings', [\App\Http\Controllers\Api\AdminSettingController::class, 'update']);
     });
 });
 

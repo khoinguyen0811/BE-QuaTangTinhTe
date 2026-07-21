@@ -40976,6 +40976,7 @@ body pre[class*="language-"] {
     background: url(../images/backgrounds/login-bg.avif);
     background-size: cover;
     background-repeat: no-repeat;
+    background-position: center;
 }
 .auth-login {
     max-width: 1160px;

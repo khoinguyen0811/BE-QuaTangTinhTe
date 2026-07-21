@@ -52,6 +52,12 @@
                 <span class="d-none d-md-block ms-1">{{ __('admin.settings.tabs.theme') }}</span>
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link d-flex align-items-center gap-2 py-3" data-bs-toggle="tab" href="#ui-components-pane" role="tab">
+                <span><i class="ti ti-components fs-4"></i></span>
+                <span class="d-none d-md-block ms-1">Thành phần UI</span>
+            </a>
+        </li>
     </ul>
 
     <!-- Form -->
@@ -179,6 +185,28 @@
                             $seo = $settings->get('seo') ?? [];
                         @endphp
                         <div class="row">
+                            <div class="col-md-12 mb-4">
+                                @php
+                                    $strictPostGate = filter_var(old('seo.strict_post_gate', $seo['strict_post_gate'] ?? true), FILTER_VALIDATE_BOOLEAN);
+                                @endphp
+                                <div class="border rounded-3 p-3 bg-light-subtle d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                                    <div>
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <i class="ti ti-shield-check fs-5 text-primary"></i>
+                                            <label class="form-label fw-bold text-dark mb-0" for="seo_strict_post_gate">SEO Gate nghiêm khắc cho bài viết</label>
+                                        </div>
+                                        <p class="text-muted mb-0 small">
+                                            Khi bật, bài viết phải đạt đủ 100% tiêu chí SEO mới được xuất bản. Khi tắt, hệ thống vẫn chấm điểm và cảnh báo nhưng không chặn xuất bản.
+                                        </p>
+                                    </div>
+                                    <div class="form-check form-switch m-0 flex-shrink-0">
+                                        <input type="hidden" name="seo[strict_post_gate]" value="0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="seo_strict_post_gate"
+                                            name="seo[strict_post_gate]" value="1" @checked($strictPostGate)
+                                            style="width: 3rem; height: 1.5rem; cursor: pointer;">
+                                    </div>
+                                </div>
+                            </div>
                             <div class="col-md-12 mb-3">
                                 <label class="form-label fw-semibold text-dark" for="seo_title">{{ __('admin.settings.seo.meta_title') }}</label>
                                 <input type="text" class="form-control text-dark" id="seo_title" name="seo[title]" 
@@ -224,6 +252,40 @@
                 </div>
             </div>
 
+            <!-- UI Components Pane -->
+            <div class="tab-pane fade" id="ui-components-pane" role="tabpanel" aria-labelledby="ui-components-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+                            <div>
+                                <h5 class="card-title fw-semibold mb-1 text-dark">Thành phần UI</h5>
+                                <p class="text-muted mb-0 small">Quản lý các khối giao diện dùng chung trên website như navbar, header, footer và các khu vực có thể mở rộng sau này.</p>
+                            </div>
+                        </div>
+
+                        <div class="border rounded-3 p-3 bg-light-subtle">
+                            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                                <div>
+                                    <h6 class="fw-semibold mb-1 text-dark">Navbar chính</h6>
+                                    <p class="text-muted mb-0 small">Chỉnh trực tiếp các mục đang hiển thị trên thanh điều hướng. Mỗi mục có thể là link thường, dropdown một cột hoặc mega menu nhiều cột.</p>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold" id="load-current-navbar">
+                                        <i class="ti ti-refresh me-1"></i> Nạp navbar hiện tại
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-sm fw-semibold" id="add-navbar-item">
+                                        <i class="ti ti-plus me-1"></i> Thêm menu
+                                    </button>
+                                </div>
+                            </div>
+
+                            <input type="hidden" name="navigation_menu" id="navigation_menu_payload">
+                            <div id="navbar-builder" class="d-flex flex-column gap-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- Sticky Save Button -->
@@ -237,11 +299,25 @@
 
 @push('scripts')
     <script>
+        const savedNavigationMenu = @json($settings->get('navigation_menu') ?? []);
+        const defaultNavigationMenu = [
+            { label: 'Trang chủ', href: '/', badge: '', visible: true, dropdown_mode: 'single', children: [], columns: [] },
+            { label: 'Giới thiệu', href: '/about', badge: '', visible: true, dropdown_mode: 'single', children: [], columns: [] },
+            { label: 'Bộ sưu tập', href: '/collection', badge: '', visible: true, dropdown_mode: 'single', children: [], columns: [] },
+            { label: 'Bài viết', href: '/posts', badge: '', visible: true, dropdown_mode: 'single', children: [], columns: [] },
+            { label: 'Liên hệ', href: '/contact', badge: '', visible: true, dropdown_mode: 'single', children: [], columns: [] },
+        ];
+        const initialNavigationMenu = Array.isArray(savedNavigationMenu) && savedNavigationMenu.length
+            ? savedNavigationMenu
+            : defaultNavigationMenu;
+
         document.addEventListener('DOMContentLoaded', function () {
+            const navbarEditor = initNavbarBuilder(initialNavigationMenu);
             const form = document.getElementById('settingsForm');
             if (form) {
                 form.addEventListener('submit', function (e) {
                     e.preventDefault();
+                    navbarEditor.sync();
 
                     Swal.fire({
                         title: '{{ __('admin.settings.saving') }}',
@@ -304,6 +380,313 @@
                 });
             }
         });
+
+        function initNavbarBuilder(initialMenu) {
+            const builder = document.getElementById('navbar-builder');
+            const payload = document.getElementById('navigation_menu_payload');
+            const addButton = document.getElementById('add-navbar-item');
+            const loadCurrentButton = document.getElementById('load-current-navbar');
+            let menu = normalizeNavigationMenu(initialMenu);
+
+            const escapeHtml = (value) => String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+
+            const emptyLink = (label = 'Menu con mới') => ({ label, href: '#', visible: true });
+            const emptyColumn = (title = 'Cột mới') => ({ title, items: [emptyLink('Item mới')] });
+            const syncPayload = () => {
+                if (payload) payload.value = JSON.stringify(menu);
+            };
+
+            function normalizeLinks(links) {
+                return Array.isArray(links)
+                    ? links.filter(Boolean).map(link => ({
+                        label: String(link.label || '').trim(),
+                        href: String(link.href || '#').trim() || '#',
+                        visible: link.visible !== false,
+                    }))
+                    : [];
+            }
+
+            function normalizeColumns(columns) {
+                return Array.isArray(columns)
+                    ? columns.filter(Boolean).map(column => ({
+                        title: String(column.title || '').trim(),
+                        items: normalizeLinks(column.items),
+                    }))
+                    : [];
+            }
+
+            function normalizeNavigationMenu(value) {
+                return Array.isArray(value)
+                    ? value.filter(Boolean).map(item => ({
+                        label: String(item.label || '').trim(),
+                        href: String(item.href || '#').trim() || '#',
+                        badge: String(item.badge || '').trim(),
+                        visible: item.visible !== false,
+                        dropdown_mode: item.dropdown_mode === 'multi' ? 'multi' : 'single',
+                        children: normalizeLinks(item.children),
+                        columns: normalizeColumns(item.columns),
+                    }))
+                    : [];
+            }
+
+            function linkRow(link, className, actionDelete, extraAttrs = '') {
+                return `
+                    <div class="${className} row g-2 align-items-center py-2 border-top" ${extraAttrs}>
+                        <div class="col-md-4">
+                            <input type="text" class="form-control form-control-sm js-link-label" value="${escapeHtml(link.label)}" placeholder="Tên item">
+                        </div>
+                        <div class="col-md-5">
+                            <input type="text" class="form-control form-control-sm js-link-href" value="${escapeHtml(link.href)}" placeholder="/collection hoặc https://...">
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-check">
+                                <input class="form-check-input js-link-visible" type="checkbox" ${link.visible !== false ? 'checked' : ''}>
+                                <label class="form-check-label small">Hiện</label>
+                            </div>
+                        </div>
+                        <div class="col-md-1 text-end">
+                            <button type="button" class="btn btn-light btn-sm text-danger" data-action="${actionDelete}" title="Xóa">
+                                <i class="ti ti-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            function renderSinglePanel(item, itemIndex) {
+                const children = item.children || [];
+                return `
+                    <div class="rounded border bg-light-subtle p-3 mt-3 js-single-panel ${item.dropdown_mode === 'single' ? '' : 'd-none'}">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div>
+                                <div class="fw-semibold text-dark small">Dropdown thường</div>
+                                <div class="text-muted small">Danh sách một cột nằm dưới menu chính.</div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-action="add-child" data-item-index="${itemIndex}">
+                                <i class="ti ti-plus me-1"></i> Thêm item
+                            </button>
+                        </div>
+                        <div class="js-child-list">
+                            ${children.length
+                                ? children.map((child, childIndex) => linkRow(child, 'js-child-row', 'delete-child', `data-child-index="${childIndex}"`)).join('')
+                                : '<div class="text-muted small py-2">Chưa có item dropdown.</div>'}
+                        </div>
+                    </div>
+                `;
+            }
+
+            function renderMultiPanel(item, itemIndex) {
+                const columns = item.columns || [];
+                return `
+                    <div class="rounded border bg-light-subtle p-3 mt-3 js-multi-panel ${item.dropdown_mode === 'multi' ? '' : 'd-none'}">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                            <div>
+                                <div class="fw-semibold text-dark small">Mega menu nhiều cột</div>
+                                <div class="text-muted small">Mỗi cột có tiêu đề riêng và danh sách item bên dưới.</div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-action="add-column" data-item-index="${itemIndex}">
+                                <i class="ti ti-columns-3 me-1"></i> Thêm cột
+                            </button>
+                        </div>
+                        <div class="row g-3 js-column-list">
+                            ${columns.length
+                                ? columns.map((column, columnIndex) => `
+                                    <div class="col-lg-4 js-column" data-column-index="${columnIndex}">
+                                        <div class="bg-white border rounded p-3 h-100">
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <input type="text" class="form-control form-control-sm fw-semibold js-column-title" value="${escapeHtml(column.title)}" placeholder="Tiêu đề cột">
+                                                <button type="button" class="btn btn-light btn-sm text-danger" data-action="delete-column" title="Xóa cột">
+                                                    <i class="ti ti-trash"></i>
+                                                </button>
+                                            </div>
+                                            <div class="js-column-item-list">
+                                                ${(column.items || []).length
+                                                    ? column.items.map((link, linkIndex) => linkRow(link, 'js-column-link-row', 'delete-column-item', `data-link-index="${linkIndex}"`)).join('')
+                                                    : '<div class="text-muted small py-2">Chưa có item trong cột.</div>'}
+                                            </div>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" data-action="add-column-item">
+                                                <i class="ti ti-plus me-1"></i> Thêm item trong cột
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')
+                                : '<div class="col-12 text-muted small py-2">Chưa có cột mega menu.</div>'}
+                        </div>
+                    </div>
+                `;
+            }
+
+            function render() {
+                if (!builder) return;
+                builder.innerHTML = menu.length
+                    ? menu.map((item, itemIndex) => `
+                        <div class="border rounded-3 p-3 bg-white js-navbar-item" data-item-index="${itemIndex}">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold">Tên menu</label>
+                                    <input type="text" class="form-control form-control-sm js-item-label" value="${escapeHtml(item.label)}" placeholder="Sản phẩm">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold">Link menu chính</label>
+                                    <input type="text" class="form-control form-control-sm js-item-href" value="${escapeHtml(item.href)}" placeholder="/collection">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold">Badge</label>
+                                    <input type="text" class="form-control form-control-sm js-item-badge" value="${escapeHtml(item.badge)}" placeholder="HOT">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold">Kiểu dropdown</label>
+                                    <select class="form-select form-select-sm js-dropdown-mode">
+                                        <option value="single" ${item.dropdown_mode !== 'multi' ? 'selected' : ''}>Single</option>
+                                        <option value="multi" ${item.dropdown_mode === 'multi' ? 'selected' : ''}>Multi</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2 d-flex align-items-center justify-content-end gap-2">
+                                    <div class="form-check me-auto">
+                                        <input class="form-check-input js-item-visible" type="checkbox" ${item.visible !== false ? 'checked' : ''}>
+                                        <label class="form-check-label small">Hiện</label>
+                                    </div>
+                                    <button type="button" class="btn btn-light btn-sm" data-action="move-item-up" ${itemIndex === 0 ? 'disabled' : ''} title="Lên">
+                                        <i class="ti ti-chevron-up"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-light btn-sm" data-action="move-item-down" ${itemIndex === menu.length - 1 ? 'disabled' : ''} title="Xuống">
+                                        <i class="ti ti-chevron-down"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-light btn-sm text-danger" data-action="delete-item" title="Xóa menu">
+                                        <i class="ti ti-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            ${renderSinglePanel(item, itemIndex)}
+                            ${renderMultiPanel(item, itemIndex)}
+                        </div>
+                    `).join('')
+                    : '<div class="text-center text-muted py-5 border rounded-3 bg-light">Chưa có menu nào. Bấm “Thêm menu” để bắt đầu.</div>';
+                syncPayload();
+            }
+
+            function readLinkRow(row) {
+                return {
+                    label: row.querySelector('.js-link-label')?.value.trim() || '',
+                    href: row.querySelector('.js-link-href')?.value.trim() || '#',
+                    visible: row.querySelector('.js-link-visible')?.checked !== false,
+                };
+            }
+
+            function syncFromDom() {
+                if (!builder) return;
+                menu = Array.from(builder.querySelectorAll('.js-navbar-item')).map(itemRow => {
+                    const mode = itemRow.querySelector('.js-dropdown-mode')?.value === 'multi' ? 'multi' : 'single';
+                    const children = Array.from(itemRow.querySelectorAll('.js-single-panel .js-child-row')).map(readLinkRow);
+                    const columns = Array.from(itemRow.querySelectorAll('.js-multi-panel .js-column')).map(columnRow => ({
+                        title: columnRow.querySelector('.js-column-title')?.value.trim() || '',
+                        items: Array.from(columnRow.querySelectorAll('.js-column-link-row')).map(readLinkRow),
+                    }));
+
+                    return {
+                        label: itemRow.querySelector('.js-item-label')?.value.trim() || '',
+                        href: itemRow.querySelector('.js-item-href')?.value.trim() || '#',
+                        badge: itemRow.querySelector('.js-item-badge')?.value.trim() || '',
+                        visible: itemRow.querySelector('.js-item-visible')?.checked !== false,
+                        dropdown_mode: mode,
+                        children,
+                        columns,
+                    };
+                });
+                syncPayload();
+            }
+
+            addButton?.addEventListener('click', () => {
+                syncFromDom();
+                menu.push({
+                    label: 'Menu mới',
+                    href: '#',
+                    badge: '',
+                    visible: true,
+                    dropdown_mode: 'single',
+                    children: [],
+                    columns: [],
+                });
+                render();
+            });
+
+            loadCurrentButton?.addEventListener('click', () => {
+                menu = normalizeNavigationMenu(defaultNavigationMenu);
+                render();
+            });
+
+            builder?.addEventListener('input', syncFromDom);
+            builder?.addEventListener('change', (event) => {
+                syncFromDom();
+                if (event.target.classList.contains('js-dropdown-mode')) {
+                    const itemRow = event.target.closest('.js-navbar-item');
+                    const itemIndex = Number(itemRow?.dataset.itemIndex);
+                    const item = menu[itemIndex];
+                    if (item && item.dropdown_mode === 'multi' && item.columns.length === 0) {
+                        item.columns = [{
+                            title: item.label || 'Cột 1',
+                            items: item.children.length ? [...item.children] : [emptyLink('Item mới')],
+                        }];
+                    }
+                    if (item && item.dropdown_mode === 'single' && item.children.length === 0 && item.columns.length) {
+                        item.children = item.columns.flatMap(column => column.items || []);
+                    }
+                    render();
+                }
+            });
+
+            builder?.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-action]');
+                if (!button) return;
+                event.preventDefault();
+                syncFromDom();
+
+                const itemRow = button.closest('.js-navbar-item');
+                const itemIndex = Number(itemRow?.dataset.itemIndex);
+                const item = menu[itemIndex];
+                const action = button.dataset.action;
+
+                if (action === 'delete-item') {
+                    menu.splice(itemIndex, 1);
+                } else if (action === 'move-item-up' && itemIndex > 0) {
+                    [menu[itemIndex - 1], menu[itemIndex]] = [menu[itemIndex], menu[itemIndex - 1]];
+                } else if (action === 'move-item-down' && itemIndex < menu.length - 1) {
+                    [menu[itemIndex + 1], menu[itemIndex]] = [menu[itemIndex], menu[itemIndex + 1]];
+                } else if (item && action === 'add-child') {
+                    item.children.push(emptyLink());
+                } else if (item && action === 'delete-child') {
+                    const childRow = button.closest('.js-child-row');
+                    item.children.splice(Number(childRow?.dataset.childIndex), 1);
+                } else if (item && action === 'add-column') {
+                    item.columns.push(emptyColumn(`Cột ${item.columns.length + 1}`));
+                    item.dropdown_mode = 'multi';
+                } else if (item && action === 'delete-column') {
+                    const column = button.closest('.js-column');
+                    item.columns.splice(Number(column?.dataset.columnIndex), 1);
+                } else if (item && action === 'add-column-item') {
+                    const column = button.closest('.js-column');
+                    const columnIndex = Number(column?.dataset.columnIndex);
+                    item.columns[columnIndex]?.items.push(emptyLink('Item mới'));
+                } else if (item && action === 'delete-column-item') {
+                    const column = button.closest('.js-column');
+                    const linkRow = button.closest('.js-column-link-row');
+                    item.columns[Number(column?.dataset.columnIndex)]?.items.splice(Number(linkRow?.dataset.linkIndex), 1);
+                }
+
+                render();
+            });
+
+            render();
+
+            return {
+                sync: syncFromDom,
+            };
+        }
 
         function generateWebhookToken() {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';

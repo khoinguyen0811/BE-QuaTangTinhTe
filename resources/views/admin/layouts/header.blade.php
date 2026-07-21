@@ -778,3 +778,87 @@
           </div>
       </header>
       <!--  Header End -->
+
+@if(data_get($dashboardNotificationSettings ?? [], 'enabled', true))
+    @push('scripts')
+        <script>
+            (() => {
+                const settings = @json($dashboardNotificationSettings ?? []);
+                let latestOrderId = @json((int) ($latestNotificationOrderId ?? 0));
+                let polling = false;
+
+                const playOrderAlert = () => {
+                    if (!settings.play_sound) return;
+                    try {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        if (!AudioContext) return;
+                        const context = new AudioContext();
+                        const oscillator = context.createOscillator();
+                        const gain = context.createGain();
+                        oscillator.connect(gain);
+                        gain.connect(context.destination);
+                        oscillator.frequency.setValueAtTime(880, context.currentTime);
+                        gain.gain.setValueAtTime(0.12, context.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.7);
+                        oscillator.start();
+                        oscillator.stop(context.currentTime + 0.7);
+                    } catch (error) {
+                        console.debug('Dashboard notification sound is unavailable.', error);
+                    }
+                };
+
+                const pollNotifications = async () => {
+                    if (polling || document.hidden) return;
+                    polling = true;
+                    try {
+                        const url = new URL(@json(route('admin.notifications.status')), window.location.origin);
+                        url.searchParams.set('since_id', latestOrderId);
+                        const response = await fetch(url, {
+                            headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+                            credentials: 'same-origin'
+                        });
+                        if (!response.ok) return;
+                        const data = await response.json();
+                        if (!data.enabled || !data.new_order) {
+                            latestOrderId = Math.max(latestOrderId, Number(data.latest_id || 0));
+                            return;
+                        }
+
+                        latestOrderId = Math.max(latestOrderId, Number(data.latest_id || data.new_order.id || 0));
+                        playOrderAlert();
+
+                        if (window.Swal) {
+                            Swal.fire({
+                                toast: true,
+                                position: 'top-end',
+                                icon: 'info',
+                                title: data.new_order.title,
+                                text: data.new_order.message,
+                                showConfirmButton: true,
+                                confirmButtonText: 'Xem đơn',
+                                timer: 12000,
+                                timerProgressBar: true
+                            }).then(result => {
+                                if (result.isConfirmed) window.location.href = data.new_order.url;
+                            });
+                        }
+
+                        const canRefreshPage = @json(request()->routeIs('admin.dashboard', 'admin.orders.index'));
+                        if (settings.auto_refresh && canRefreshPage) {
+                            window.setTimeout(() => window.location.reload(), 1800);
+                        }
+                    } catch (error) {
+                        console.debug('Dashboard notification polling failed.', error);
+                    } finally {
+                        polling = false;
+                    }
+                };
+
+                window.setInterval(pollNotifications, 20000);
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) pollNotifications();
+                });
+            })();
+        </script>
+    @endpush
+@endif

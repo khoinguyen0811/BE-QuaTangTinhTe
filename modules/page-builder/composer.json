@@ -1,0 +1,37 @@
+{
+    "name": "mbws/laravel-pagebuilder",
+    "description": "Forked drag and drop pagebuilder for QuaTangTinhTe backend project.",
+    "keywords": [
+        "laravel",
+        "pagebuilder"
+    ],
+    "homepage": "https://github.com/HansSchouten/Laravel-Pagebuilder",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Hans Schouten",
+            "email": "hans@falcosolutions.nl"
+        }
+    ],
+    "require": {
+        "php": ">=8.2",
+        "hansschouten/phpagebuilder": "^0.31"
+    },
+    "autoload": {
+        "psr-4": {
+            "HansSchouten\\LaravelPageBuilder\\": "src/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "extra": {
+        "laravel": {
+            "providers": [
+                "HansSchouten\\LaravelPageBuilder\\ServiceProvider"
+            ],
+            "aliases": {
+                "PageBuilder": "HansSchouten\\LaravelPageBuilder\\Facade"
+            }
+        }
+    }
+}

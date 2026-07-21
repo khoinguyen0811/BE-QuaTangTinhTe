@@ -175,16 +175,21 @@
                 <div class="card-body">
                     <h4 class="card-title mb-7">{{ __('catalog.products.sections.product_details') }}</h4>
                     <div class="mb-3">
-                        <label class="form-label" for="category_id">{{ __('catalog.fields.category') }}</label>
-                        <select class="catalog-select2 form-control" id="category_id" name="category_id">
-                            <option value="">{{ __('catalog.common.none') }}</option>
+                        <label class="form-label" for="category_ids">{{ __('catalog.fields.category') }} (Chọn tối đa 3 danh mục)</label>
+                        @php
+                            $selectedIds = old('category_ids', $product->categories->pluck('id')->toArray());
+                            if (empty($selectedIds) && $product->category_id) {
+                                $selectedIds = [$product->category_id];
+                            }
+                        @endphp
+                        <select class="catalog-select2 form-control" id="category_ids" name="category_ids[]" multiple="multiple" data-placeholder="Chọn danh mục...">
                             @foreach($categoryOptions as $category)
-                                <option value="{{ $category->id }}" @selected((string) old('category_id', $product->category_id) === (string) $category->id)>
+                                <option value="{{ $category->id }}" @selected(in_array($category->id, $selectedIds))>
                                     {!! str_repeat('&nbsp;&nbsp;', $category->depth ?? 0) !!}{{ $category->depth ? '↳ ' : '' }}{{ $category->name }}
                                 </option>
                             @endforeach
                         </select>
-                        <p class="fs-2 mb-0">{{ __('catalog.products.help.category') }}</p>
+                        <p class="fs-2 mb-0">Chọn tối đa 3 danh mục cho sản phẩm này.</p>
                     </div>
 
                     <div class="mb-3">

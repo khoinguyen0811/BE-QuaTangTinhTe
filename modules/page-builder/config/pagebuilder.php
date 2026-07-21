@@ -175,5 +175,6 @@ return [
      |
      */
     'class_replacements' => [
+        \PHPageBuilder\Modules\GrapesJS\PageRenderer::class => \HansSchouten\LaravelPageBuilder\Services\CustomPageRenderer::class,
     ],
 ];

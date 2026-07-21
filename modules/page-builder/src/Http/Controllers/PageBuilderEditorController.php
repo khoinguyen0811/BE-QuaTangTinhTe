@@ -30,9 +30,39 @@ class PageBuilderEditorController extends Controller
     {
         Gate::authorize('update', $page);
 
-        // Auto-provision PageBuilder bridge if missing or legacy driver
-        if ($page->builder_driver !== 'laravel-pagebuilder' || !$page->builder_page_id || !PageBuilderPage::where('id', $page->builder_page_id)->exists()) {
-            DB::transaction(function () use ($page, $locale) {
+        // Auto-provision PageBuilder bridge if missing, legacy driver, or empty page builder data
+        $shouldConvert = false;
+        $existingBuilderPage = null;
+
+        if ($page->builder_driver !== 'laravel-pagebuilder' || !$page->builder_page_id) {
+            $shouldConvert = true;
+        } else {
+            $existingBuilderPage = PageBuilderPage::find($page->builder_page_id);
+            if (!$existingBuilderPage) {
+                $shouldConvert = true;
+            } else {
+                $hasLegacyContent = false;
+                $layoutSource = $page->layout_published ?: $page->layout_draft;
+                if (is_array($layoutSource) && isset($layoutSource['blocks'])) {
+                    $hasLegacyContent = true;
+                } elseif (is_string($layoutSource)) {
+                    $decoded = json_decode($layoutSource, true);
+                    if (is_array($decoded) && isset($decoded['blocks'])) {
+                        $hasLegacyContent = true;
+                    }
+                }
+                
+                $isCurrentlyEmpty = empty($existingBuilderPage->draft_html) && 
+                                    ($existingBuilderPage->data === '{}' || empty($existingBuilderPage->data));
+                
+                if ($isCurrentlyEmpty && $hasLegacyContent) {
+                    $shouldConvert = true;
+                }
+            }
+        }
+
+        if ($shouldConvert) {
+            DB::transaction(function () use ($page, $locale, $existingBuilderPage) {
                 $draftHtml = '';
                 $dataJson = '{}';
 
@@ -52,27 +82,35 @@ class PageBuilderEditorController extends Controller
                     }
                 }
 
-                $builderPage = PageBuilderPage::create([
-                    'name' => $page->title,
-                    'layout' => 'full-width',
-                    'data' => $dataJson,
-                    'draft_html' => $draftHtml,
-                    'draft_css' => '',
-                ]);
+                if ($existingBuilderPage) {
+                    $existingBuilderPage->update([
+                        'data' => $dataJson,
+                        'draft_html' => $draftHtml,
+                        'draft_css' => '',
+                    ]);
+                } else {
+                    $builderPage = PageBuilderPage::create([
+                        'name' => $page->title,
+                        'layout' => 'full-width',
+                        'data' => $dataJson,
+                        'draft_html' => $draftHtml,
+                        'draft_css' => '',
+                    ]);
 
-                PageBuilderPageTranslation::create([
-                    'page_id' => $builderPage->id,
-                    'locale' => $locale,
-                    'title' => $page->title,
-                    'meta_title' => $page->seo_title ?? $page->title,
-                    'meta_description' => $page->seo_description ?? '',
-                    'route' => $page->slug,
-                ]);
+                    PageBuilderPageTranslation::create([
+                        'page_id' => $builderPage->id,
+                        'locale' => $locale,
+                        'title' => $page->title,
+                        'meta_title' => $page->seo_title ?? $page->title,
+                        'meta_description' => $page->seo_description ?? '',
+                        'route' => $page->slug,
+                    ]);
 
-                $page->update([
-                    'builder_page_id' => $builderPage->id,
-                    'builder_driver' => 'laravel-pagebuilder',
-                ]);
+                    $page->update([
+                        'builder_page_id' => $builderPage->id,
+                        'builder_driver' => 'laravel-pagebuilder',
+                    ]);
+                }
             });
             $page->refresh();
         }
@@ -80,16 +118,19 @@ class PageBuilderEditorController extends Controller
         // Initialize PHPageBuilder core
         $phpPageBuilder = app()->make('phpPageBuilder');
 
+        // Resolve PageBuilderPage record
+        $phpbPage = null;
+        if ($page->builder_page_id) {
+            $pageRepository = new \PHPageBuilder\Repositories\PageRepository;
+            $phpbPage = $pageRepository->findWithId($page->builder_page_id);
+        }
+
         // Dynamically override PHPageBuilder URL paths with correct locale prefix
         // so all AJAX URLs (save, upload, renderBlock, etc.) point to correct Laravel routes
         global $phpb_config;
         $phpb_config['pagebuilder']['url'] = '/' . $locale . '/admin/page-builder-lab/editor';
         $phpb_config['pagebuilder']['actions']['back'] = '/' . $locale . '/admin/page-builder-lab';
         $phpb_config['website_manager']['url'] = '/' . $locale . '/admin/page-builder-lab';
-
-        // Resolve PageBuilderPage record
-        $pageRepository = new \PHPageBuilder\Repositories\PageRepository;
-        $phpbPage = $pageRepository->findWithId($page->builder_page_id);
 
         if (! $phpbPage) {
             return redirect()->route('pagebuilder.pages.index', ['locale' => $locale])

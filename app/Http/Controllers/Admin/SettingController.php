@@ -20,7 +20,11 @@ class SettingController extends Controller
     {
         $settings = ProjectSetting::query()->get()->pluck('setting_value', 'setting_key');
 
-        return view('admin.settings.index', compact('settings'));
+        $customPages = \App\Models\CustomPage::select('title', 'slug')->get();
+        $categories = \App\Models\Category::select('id', 'name', 'slug')->get();
+        $postCategories = \App\Models\PostCategory::select('id', 'name', 'slug')->get();
+
+        return view('admin.settings.index', compact('settings', 'customPages', 'categories', 'postCategories'));
     }
 
     /**

@@ -300,6 +300,32 @@
 @push('scripts')
     <script>
         const savedNavigationMenu = @json($settings->get('navigation_menu') ?? []);
+        const menuPredefinedLinks = [
+            {
+                group: 'Trang hệ thống',
+                options: [
+                    { label: 'Trang chủ', href: '/' },
+                    { label: 'Giới thiệu', href: '/about' },
+                    { label: 'Bộ sưu tập (Tất cả)', href: '/collection' },
+                    { label: 'Bài viết (Tất cả)', href: '/posts' },
+                    { label: 'Liên hệ', href: '/contact' },
+                    { label: 'Giỏ hàng', href: '/cart' },
+                    { label: 'Đăng nhập', href: '/login' }
+                ]
+            },
+            {
+                group: 'Trang tĩnh tùy biến',
+                options: @json($customPages->map(fn($p) => ['label' => $p->title, 'href' => '/pages/' . $p->slug]))
+            },
+            {
+                group: 'Danh mục sản phẩm (Bộ sưu tập)',
+                options: @json($categories->map(fn($c) => ['label' => $c->name, 'href' => '/collection?category=' . $c->slug]))
+            },
+            {
+                group: 'Danh mục bài viết',
+                options: @json($postCategories->map(fn($pc) => ['label' => $pc->name, 'href' => '/posts?category=' . $pc->slug]))
+            }
+        ];
         const defaultNavigationMenu = [
             { label: 'Trang chủ', href: '/', badge: '', visible: true, dropdown_mode: 'single', children: [], columns: [] },
             { label: 'Giới thiệu', href: '/about', badge: '', visible: true, dropdown_mode: 'single', children: [], columns: [] },
@@ -395,6 +421,31 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
 
+            function getUrlSelectHtml(currentHref) {
+                let matched = false;
+                let groupsHtml = '';
+                
+                menuPredefinedLinks.forEach(group => {
+                    let optionsHtml = '';
+                    group.options.forEach(opt => {
+                        const isSelected = opt.href === currentHref;
+                        if (isSelected) matched = true;
+                        optionsHtml += `<option value="${escapeHtml(opt.href)}" ${isSelected ? 'selected' : ''}>${escapeHtml(opt.label)} (${escapeHtml(opt.href)})</option>`;
+                    });
+                    if (optionsHtml) {
+                        groupsHtml += `<optgroup label="${escapeHtml(group.group)}">${optionsHtml}</optgroup>`;
+                    }
+                });
+                
+                const selectHtml = `
+                    <select class="form-select form-select-sm js-link-url-select">
+                        <option value="custom" ${!matched ? 'selected' : ''}>-- Nhập URL Tùy biến --</option>
+                        ${groupsHtml}
+                    </select>
+                `;
+                return { selectHtml, isCustom: !matched };
+            }
+
             const emptyLink = (label = 'Menu con mới') => ({ label, href: '#', visible: true });
             const emptyColumn = (title = 'Cột mới') => ({ title, items: [emptyLink('Item mới')] });
             const syncPayload = () => {
@@ -435,13 +486,15 @@
             }
 
             function linkRow(link, className, actionDelete, extraAttrs = '') {
+                const { selectHtml, isCustom } = getUrlSelectHtml(link.href);
                 return `
                     <div class="${className} row g-2 align-items-center py-2 border-top" ${extraAttrs}>
                         <div class="col-md-4">
                             <input type="text" class="form-control form-control-sm js-link-label" value="${escapeHtml(link.label)}" placeholder="Tên item">
                         </div>
                         <div class="col-md-5">
-                            <input type="text" class="form-control form-control-sm js-link-href" value="${escapeHtml(link.href)}" placeholder="/collection hoặc https://...">
+                            ${selectHtml}
+                            <input type="text" class="form-control form-control-sm mt-1 js-link-href ${isCustom ? '' : 'd-none'}" value="${escapeHtml(link.href)}" placeholder="/collection hoặc https://...">
                         </div>
                         <div class="col-md-2">
                             <div class="form-check">
@@ -524,7 +577,9 @@
             function render() {
                 if (!builder) return;
                 builder.innerHTML = menu.length
-                    ? menu.map((item, itemIndex) => `
+                    ? menu.map((item, itemIndex) => {
+                        const { selectHtml, isCustom } = getUrlSelectHtml(item.href);
+                        return `
                         <div class="border rounded-3 p-3 bg-white js-navbar-item" data-item-index="${itemIndex}">
                             <div class="row g-3 align-items-end">
                                 <div class="col-md-3">
@@ -533,7 +588,8 @@
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label small fw-semibold">Link menu chính</label>
-                                    <input type="text" class="form-control form-control-sm js-item-href" value="${escapeHtml(item.href)}" placeholder="/collection">
+                                    ${selectHtml}
+                                    <input type="text" class="form-control form-control-sm mt-1 js-item-href ${isCustom ? '' : 'd-none'}" value="${escapeHtml(item.href)}" placeholder="/collection">
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small fw-semibold">Badge</label>
@@ -565,7 +621,8 @@
                             ${renderSinglePanel(item, itemIndex)}
                             ${renderMultiPanel(item, itemIndex)}
                         </div>
-                    `).join('')
+                        `;
+                    }).join('')
                     : '<div class="text-center text-muted py-5 border rounded-3 bg-light">Chưa có menu nào. Bấm “Thêm menu” để bắt đầu.</div>';
                 syncPayload();
             }
@@ -622,6 +679,23 @@
 
             builder?.addEventListener('input', syncFromDom);
             builder?.addEventListener('change', (event) => {
+                if (event.target.classList.contains('js-link-url-select')) {
+                    const select = event.target;
+                    const wrapper = select.closest('.col-md-5') || select.closest('.col-md-3');
+                    const textInput = wrapper.querySelector('.js-link-href') || wrapper.querySelector('.js-item-href');
+                    
+                    if (textInput) {
+                        if (select.value === 'custom') {
+                            textInput.classList.remove('d-none');
+                            textInput.focus();
+                        } else {
+                            textInput.classList.add('d-none');
+                            textInput.value = select.value;
+                        }
+                    }
+                    syncFromDom();
+                }
+
                 syncFromDom();
                 if (event.target.classList.contains('js-dropdown-mode')) {
                     const itemRow = event.target.closest('.js-navbar-item');

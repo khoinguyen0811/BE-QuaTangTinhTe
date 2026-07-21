@@ -288,7 +288,7 @@
                           <!-- Trang tĩnh (Custom Pages) -->
                           @can('viewAny', \App\Models\CustomPage::class)
                           <li class="sidebar-item">
-                              <a class="sidebar-link" href="{{ route('pagebuilder.pages.index', ['locale' => app()->getLocale()]) }}" aria-expanded="false">
+                              <a class="sidebar-link" href="{{ \Illuminate\Support\Facades\Route::has('pagebuilder.pages.index') ? route('pagebuilder.pages.index', ['locale' => app()->getLocale()]) : url('/' . app()->getLocale() . '/admin/custom-pages') }}" aria-expanded="false">
                                   <iconify-icon icon="solar:document-bold-duotone"></iconify-icon>
                                   <span class="hide-menu">Quản lý Trang Tĩnh</span>
                               </a>

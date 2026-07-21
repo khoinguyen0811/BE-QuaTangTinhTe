@@ -57,7 +57,9 @@
                     <tbody>
                         @forelse($pages as $page)
                             @php
-                                $published = json_decode($page->layout_published, true);
+                                $published = is_array($page->layout_published) 
+                                    ? $page->layout_published 
+                                    : (is_string($page->layout_published) ? json_decode($page->layout_published, true) : null);
                             @endphp
                             <tr>
                                 <td class="border-bottom-0">

@@ -169,6 +169,13 @@ HTML;
         // Apply our custom script
         $phpPageBuilder->getPageBuilder()->customScripts('head', $customScript);
 
+        // Inject element-level building blocks (columns, text, image, video, form, etc.)
+        $elementBlocksPath = __DIR__ . '/../../resources/assets/element-blocks.js';
+        if (file_exists($elementBlocksPath)) {
+            $elementBlocksJs = file_get_contents($elementBlocksPath);
+            $phpPageBuilder->getPageBuilder()->customScripts('body', '<script type="text/javascript">' . $elementBlocksJs . '</script>');
+        }
+
         // Render page builder GrapesJS UI
         $phpPageBuilder->getPageBuilder()->renderPageBuilder($phpbPage);
         exit();

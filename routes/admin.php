@@ -95,11 +95,6 @@ Route::middleware(['auth', 'admin'])->group(function () {
         Route::get('custom-pages/{customPage}/media', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'mediaLibrary'])->name('custom-pages.media.index');
         Route::post('custom-pages/{customPage}/media', [\App\Http\Controllers\Admin\CustomPageLayoutController::class, 'upload'])->name('custom-pages.media');
 
-        // Explicitly load Page Builder module routes
-        if (file_exists(base_path('modules/page-builder/routes/admin.php'))) {
-            require base_path('modules/page-builder/routes/admin.php');
-        }
-
         Route::get('notification-settings', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'index'])->name('notification-settings.index');
         Route::post('notification-settings', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'update'])->name('notification-settings.update');
         Route::post('notification-settings/test-smtp', [\App\Http\Controllers\Admin\NotificationSettingController::class, 'testSmtp'])->name('notification-settings.test-smtp');
